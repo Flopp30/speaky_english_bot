@@ -7,11 +7,12 @@ from datetime import timedelta, datetime
 from textwrap import dedent
 
 from asgiref.sync import sync_to_async
+from django.template import Template, Context
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice
 from telegram.ext import (ApplicationBuilder, ContextTypes,
-    CommandHandler, MessageHandler, CallbackQueryHandler, PreCheckoutQueryHandler,
-    filters)
+                          CommandHandler, MessageHandler, CallbackQueryHandler, PreCheckoutQueryHandler,
+                          filters)
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
@@ -20,8 +21,8 @@ from django.utils import timezone
 
 from user.models import User
 
-
 logger = logging.getLogger('tbot')
+
 
 class Command(BaseCommand):
     def handle(self, *args, **options):
@@ -45,39 +46,32 @@ class TelegramLogsHandler(logging.Handler):
         requests.post(url=url, data=data)
 
 
-def get_date(date:datetime):
+def get_date(date: datetime):
     month_list = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-        'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
-    return f"{date.day} {month_list[date.month -1]}"
-
+                  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+    return f"{date.day} {month_list[date.month - 1]}"
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    with open('bot_parts/messages/greeting.html') as file:
+        template = Template(file.read())
     chat_id = update.effective_chat.id
-    user = await User.objects.filter(chat_id=chat_id).prefetch_related('tokens').afirst()
-    if not user:
-        text = dedent("""
-        Приветствуем в чат-боте <b>Speaky bot</b>.
-        """)
-        # Предоставление токена означает ваше согласие с условиями <a href="https://telegra.ph/Licenzionnoe-soglashenie-s-konechnym-polzovatelem-na-ispolzovanie-programmnogo-produkta-Kaspi-reminder-bot-10-28">пользовательского соглашения</a>.
-        await context.bot.send_message(
-            update.effective_chat.id,
-            text=text,
-            parse_mode='HTML'
-        )
-        await context.bot.delete_message(
+    user = await User.objects.filter(chat_id=chat_id).afirst()
+    if user:
+        username = user.username
+    else:
+        username = None
+        await User.objects.acreate(
+            username=update.effective_user.username,
             chat_id=chat_id,
-            message_id=update.effective_message.message_id
+            id=update.effective_user.id
         )
-        return 'START'
+
     context.user_data['user'] = user
     keyboard = []
-    text = dedent(f"""
-    Приветствуем Вас, <b>{context.user_data['user'].username}</b>
-    """)
     await context.bot.send_message(
         chat_id,
-        text=text,
+        text=template.render(Context({'username': username})),
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='HTML',
     )
@@ -86,7 +80,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message_id=update.effective_message.message_id
     )
     return 'START'
-
 
 
 async def user_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -118,23 +111,24 @@ def main():
     stream_handler.setLevel(settings.LOG_LEVEL)
     # stream_handler.setLevel(logging.DEBUG)
     logger.addHandler(stream_handler)
-    print(logger.handlers)
-
     application = ApplicationBuilder().token(settings.TELEGRAM_TOKEN).build()
 
     pattern = re.compile(r'subscribe!.*')
     application.add_handler(CallbackQueryHandler(user_input_handler))
     application.add_handler(MessageHandler(filters.TEXT, user_input_handler))
     application.add_handler(CommandHandler('start', user_input_handler))
-
-    if settings.BOT_MODE == 'webhook':
-        logger.warning('Bot started in WEBHOOK mode')
-        application.run_webhook(
-            listen="0.0.0.0",
-            port=5000,
-            url_path=settings.TELEGRAM_TOKEN,
-            webhook_url=f"{settings.WEBHOOK_URL}{settings.TELEGRAM_TOKEN}"
-        )
-    else:
-        logger.warning('Bot started in POLLING mode')
-        application.run_polling()
+    try:
+        if settings.BOT_MODE == 'webhook':
+            logger.warning('Bot started in WEBHOOK mode')
+            application.run_webhook(
+                listen="0.0.0.0",
+                port=5000,
+                url_path=settings.TELEGRAM_TOKEN,
+                webhook_url=f"{settings.WEBHOOK_URL}{settings.TELEGRAM_TOKEN}"
+            )
+        else:
+            logger.warning('Bot started in POLLING mode')
+            application.run_polling()
+    except Exception:
+        import traceback
+        logger.warning(traceback.format_exc())
