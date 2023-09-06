@@ -9,7 +9,7 @@ from datetime import timedelta, datetime
 from textwrap import dedent
 
 from asgiref.sync import sync_to_async
-from django.template import Template, Context
+from django.template import Context, Template as DjTemplate
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice
 from telegram.ext import (ApplicationBuilder, ContextTypes,
@@ -21,6 +21,8 @@ from django.core.management.base import BaseCommand
 from django.db.models import Count
 from django.utils import timezone
 
+from templates.models import Template
+from templates.templates import MessageTemplates
 from user.models import User
 
 logger = logging.getLogger('tbot')
@@ -49,8 +51,6 @@ class TelegramLogsHandler(logging.Handler):
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    with open('bot_parts/messages/greeting.html') as file:
-        template = Template(file.read())
     chat_id = update.effective_chat.id
     if context.user_data['user'].is_superuser:
         return await staff_functions_select(update, context)
@@ -105,25 +105,8 @@ async def welcome_letter(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("Индивидуальные занятия",
                               callback_data='personal_lessons')],
     ]
-    text = dedent(f"""
-        Привет, @{context.user_data['user'].username}
-
-        Я Дарья, одна из 5% лучших учителей мира и основатель Speaky Studio. Мы с командой знаем, как тебе достичь твоей цели в английском и будем рады помочь 😉
-
-        Просто выбери один из форматов ниже:
-
-        🔸 <b>Разговорный клуб</b>, где ты прокачаешь свой разговорный английский, \
-            избавишься от языкового барьера, болтая на самые горячие темы с @dasha.speaky
-            от 3000руб/мес
-
-        🔸 <b>Групповые занятия</b>, где ты сможешь набрать базу, разложить знания по полочкам, \
-            активировать пассивные знания и начать говорить с преподавателями из нашей команды
-            от 500руб/занятие
-
-        🔸 <b>Индивидуальные занятия</b>, где ты сможешь максимально быстро закрыть любой запрос, \
-            даже самый узкий, занимаясь по программе, подобранной под ваши интересы и нужды с преподавателем из нашей команды
-            от 1500руб/занятие
-    """)
+    text = MessageTemplates.templates.get('welcome_letter', '').format(
+        username=context.user_data['user'].username)
     await context.bot.send_message(
         chat_id,
         text=text,
@@ -249,7 +232,7 @@ async def speak_club_lower(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     await context.bot.send_message(
         chat_id,
-        text=template.render(Context({'username': username})),
+        text=text,
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='HTML',
     )
@@ -462,6 +445,9 @@ def main():
     application.add_handler(CallbackQueryHandler(user_input_handler))
     application.add_handler(MessageHandler(filters.TEXT, user_input_handler))
     application.add_handler(CommandHandler('start', user_input_handler))
+    for template in Template.objects.all():
+        MessageTemplates.templates[template.name] = template.content.replace(
+            '<div>', '').replace('</div>', '').replace('<br />', '').replace('&nbsp;', '')
     try:
         if settings.BOT_MODE == 'webhook':
             logger.warning('Bot started in WEBHOOK mode')
