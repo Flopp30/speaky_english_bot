@@ -52,15 +52,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with open('bot_parts/messages/greeting.html') as file:
         template = Template(file.read())
     chat_id = update.effective_chat.id
-    if context.user_data.get('user'):
+    if context.user_data['user'].is_superuser:
+        return await staff_functions_select(update, context)
+    if context.user_data['user'].state != 'NEW':
         return await welcome_letter(update, context)
-    user, _ = await User.objects.aget_or_create(
-        chat_id=chat_id,
-        defaults={
-            'username': update.effective_chat.username
-        }
-    )
-    context.user_data['user'] = user
     text = dedent(f"""
         Привет ✨
         Это бот студии английского <b>Speaky</b>
@@ -75,7 +70,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id=chat_id,
         message_id=update.effective_message.message_id
     )
+    context.user_data['user'].state = 'START'
     return 'START'
+
+
+async def staff_functions_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    text = dedent(f"""
+        Здравствуйте, {context.user_data['user'].username}.
+        Хотите посмотреть списки пользователей с активными подписками?
+    """)
+    keyboard = [
+        [InlineKeyboardButton('Активные пользователи', callback_data='users')]
+    ]
+    await context.bot.send_message(
+        chat_id,
+        text=text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='HTML',
+    )
+    await context.bot.delete_message(
+        chat_id=chat_id,
+        message_id=update.effective_message.message_id
+    )
+    return 'AWAIT_ADMIN_CHOICE'
 
 
 async def welcome_letter(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -396,6 +414,15 @@ async def personal_lessons_start(update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def user_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    if not context.user_data.get('user'):
+        context.user_data['user'], _ = await User.objects.aget_or_create(
+            chat_id=chat_id,
+            defaults={
+                'username': update.effective_chat.username
+            }
+        )
+    context.user_data['user'].state
     if update.message:
         user_reply = update.message.text
     elif update.callback_query.data:
@@ -405,8 +432,9 @@ async def user_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if user_reply == '/start':
         user_state = 'START'
     else:
-        user_state = context.user_data.get('state', 'START')
+        user_state = context.user_data['user'].state or 'START'
     states_function = {
+        'NEW': start,
         'START': start,
         'WELCOME_CHOICE': handle_welcome_choice,
         'SPEAK_CLUB_LEVEL_CHOICE': handle_speak_club_level_choice,
@@ -416,7 +444,8 @@ async def user_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     state_handler = states_function[user_state]
     next_state = await state_handler(update, context)
-    context.user_data['state'] = next_state
+    context.user_data['user'].state = next_state
+    await context.user_data['user'].asave()
 
 
 def main():

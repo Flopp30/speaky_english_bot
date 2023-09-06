@@ -16,6 +16,17 @@ class User(models.Model):
         blank=True,
         null=True,
     )
+
+    state = models.CharField(
+        verbose_name='Статус переписки в боте',
+        max_length=50,
+        default='NEW'
+    )
+
+    last_visit_time = models.DateTimeField(
+        verbose_name='Время последнего посещения',
+        auto_now=True,
+    )
     registration_datetime = models.DateTimeField(
         verbose_name='Дата и время регистрации',
         auto_now_add=True,
