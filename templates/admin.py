@@ -6,4 +6,9 @@ from .models import Template
 
 @admin.register(Template)
 class TemplateAdmin(admin.ModelAdmin):
-    pass
+    list_display = (
+        'id', 'name', 'content',
+    )
+    ordering = ('-id',)
+    list_per_page = 20
+    search_fields = ('name', 'content')

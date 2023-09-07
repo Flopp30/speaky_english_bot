@@ -12,15 +12,11 @@ class SubPeriodTypes(models.TextChoices):
 
 
 class Subscription(models.Model):
+    id = models.BigIntegerField(verbose_name='ID', primary_key=True)
     is_auto_renew = models.BooleanField(verbose_name='Автоматически продлевать?', default=False)
     sub_start_date = models.DateTimeField(verbose_name='Дата начала подписки', **NULLABLE)
     unsub_date = models.DateTimeField(verbose_name='Дата окончания подписки', **NULLABLE)
     sub_period = models.IntegerField(verbose_name='Длительность подписки.', **NOT_NULLABLE, default=1)
-
-    verified_payment_id = models.UUIDField(
-        verbose_name='Подтвержденный ID платежа (автоматическое продление подписки)',
-        **NULLABLE,
-    )
 
     sub_period_type = models.CharField(
         verbose_name='Тип периода подписки (день, месяц. год)',
@@ -28,6 +24,11 @@ class Subscription(models.Model):
         choices=SubPeriodTypes.choices,
         default=SubPeriodTypes.MONTHS,
         **NOT_NULLABLE
+    )
+
+    verified_payment_id = models.UUIDField(
+        verbose_name='Подтвержденный ID платежа (автоматическое продление подписки)',
+        **NULLABLE,
     )
     product = models.ForeignKey(
         Product,
