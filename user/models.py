@@ -36,11 +36,6 @@ class User(models.Model):
         **NULLABLE,
     )
 
-    verified_payment_id = models.UUIDField(
-        verbose_name='Подтвержденный ID платежа (автоматическое продление подписки)',
-        **NULLABLE,
-    )
-
     is_active = models.BooleanField(
         verbose_name='Активен?',
         **NOT_NULLABLE,
