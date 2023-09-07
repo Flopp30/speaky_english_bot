@@ -46,10 +46,17 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+
+    # other
     'tinymce',
+
+    # speakybot
     'user',
     'bot_parts',
     'templates',
+    'product',
+    'subscription',
+    'payment',
 ]
 
 MIDDLEWARE = [

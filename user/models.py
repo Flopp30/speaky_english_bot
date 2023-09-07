@@ -1,7 +1,6 @@
 from django.db import models
 
-NULLABLE = {'null': True, 'blank': True}
-NOT_NULLABLE = {'null': False, 'blank': False}
+from utils.models import NULLABLE, NOT_NULLABLE
 
 
 class User(models.Model):
@@ -50,12 +49,6 @@ class User(models.Model):
 
     is_superuser = models.BooleanField(
         verbose_name='Администратор',
-        **NOT_NULLABLE,
-        default=False,
-    )
-
-    is_accepted_to_autopayment = models.BooleanField(
-        verbose_name='Согласен на автоматические списания',
         **NOT_NULLABLE,
         default=False,
     )
