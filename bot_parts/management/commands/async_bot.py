@@ -11,7 +11,7 @@ from textwrap import dedent
 from asgiref.sync import sync_to_async
 from django.template import Context, Template as DjTemplate
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice, InputFile, InputMediaPhoto
 from telegram.ext import (ApplicationBuilder, ContextTypes,
                           CommandHandler, MessageHandler, CallbackQueryHandler, PreCheckoutQueryHandler,
                           filters)
@@ -22,8 +22,8 @@ from django.db.models import Count
 from django.utils import timezone
 
 from templates.models import Template
-from templates.templates import MessageTemplates
-from user.models import User
+from user.models import User, Teacher
+from utils.models import MessageTemplates, MessageTeachers
 
 logger = logging.getLogger('tbot')
 
@@ -105,7 +105,7 @@ async def welcome_letter(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("Индивидуальные занятия",
                               callback_data='personal_lessons')],
     ]
-    text = MessageTemplates.templates.get('welcome_letter', '').format(
+    text = MessageTemplates.templates.get('welcome_letter', 'Нужен шаблон welcome_letter. {username}').format(
         username=context.user_data['user'].username)
     await context.bot.send_message(
         chat_id,
@@ -383,17 +383,85 @@ async def personal_lessons_start(update: Update, context: ContextTypes.DEFAULT_T
         объем домашних заданий и программа зависит отт ваших задач
         стоимость от 1500руб/занятие, оплата за месяц
     """)
-    # TODO Продумать отображение анкет преподавателей
     keyboard = [
         [InlineKeyboardButton('Анкета', url='http://example.com')]
+    ]
+    pagination_keyboard = [
+        [InlineKeyboardButton(text='<<', callback_data='TEACHER_PREV')],
+        [InlineKeyboardButton(text='>>', callback_data='TEACHER_NEXT')]
     ]
     await context.bot.send_message(
         chat_id=chat_id,
         text=text,
         parse_mode='HTML',
+    )
+    if MessageTeachers.teachers:
+        teacher_info = MessageTeachers.teachers[0]
+        photo_path, caption = teacher_info.get("photo_path"), teacher_info.get("caption")
+        with open(photo_path, 'rb') as photo_file:
+            message = await context.bot.send_photo(
+                chat_id=chat_id,
+                photo=InputFile(photo_file),
+                caption=caption,
+                parse_mode='HTML',
+                reply_markup=InlineKeyboardMarkup(pagination_keyboard)
+            )
+    if message:
+        context.chat_data.update({"current_teacher_list_position": 0})
+        context.chat_data.update({"message_id": message.id})
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        parse_mode='HTML',
+    )
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text='По ссылке ты можешь заполнить анкету',
+        parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
-    return 'START'
+    return 'TEACHER_PAGINATION'
+
+
+async def teacher_pagination(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    message_id = context.chat_data.get('message_id')
+    current_list_position = context.chat_data.get('current_teacher_list_position', 0)
+    pagination_keyboard = [
+        [InlineKeyboardButton(text='<<', callback_data='TEACHER_PREV')],
+        [InlineKeyboardButton(text='>>', callback_data='TEACHER_NEXT')]
+    ]
+    if not update.callback_query or not message_id:
+        return 'START'
+    elif update.callback_query.data in ('TEACHER_PREV', 'TEACHER_NEXT'):
+        new_position = current_list_position
+        if update.callback_query.data == "TEACHER_PREV" and current_list_position > 0:
+            new_position = current_list_position - 1
+        elif update.callback_query.data == 'TEACHER_NEXT' and current_list_position < len(MessageTeachers.teachers) - 1:
+            new_position = current_list_position + 1
+
+        if new_position != current_list_position:
+            teacher_info = MessageTeachers.teachers[new_position]
+
+            photo_path, caption = teacher_info.get('photo_path'), teacher_info.get('caption')
+            with open(photo_path, 'rb') as photo_file:
+                new_photo = InputMediaPhoto(photo_file)
+                await context.bot.edit_message_media(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    media=new_photo
+                )
+                message = await context.bot.edit_message_caption(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    caption=caption,
+                    parse_mode='HTML',
+                    reply_markup=InlineKeyboardMarkup(pagination_keyboard)
+                )
+            context.chat_data.update({'current_teacher_list_position': new_position})
+            context.chat_data.update({'message_id': message.id})
+        return 'TEACHER_PAGINATION'
+    return
 
 
 async def user_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -405,7 +473,6 @@ async def user_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 'username': update.effective_chat.username
             }
         )
-    context.user_data['user'].state
     if update.message:
         user_reply = update.message.text
     elif update.callback_query.data:
@@ -423,6 +490,7 @@ async def user_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         'SPEAK_CLUB_LEVEL_CHOICE': handle_speak_club_level_choice,
         'LOWER_LEVEL_CHOICE': handle_lower_level_choice,
         'AWAIT_VOICE': handle_voice_test,
+        'TEACHER_PAGINATION': teacher_pagination,
     }
 
     state_handler = states_function[user_state]
@@ -432,6 +500,8 @@ async def user_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 def main():
+    import tracemalloc
+    tracemalloc.start()
     # telegram_handler = TelegramLogsHandler(settings.ADMIN_TG_BOT, settings.ADMIN_TG_CHAT)
     # telegram_handler.setLevel(logging.WARNING)
     # logger.addHandler(telegram_handler)
@@ -446,8 +516,29 @@ def main():
     application.add_handler(MessageHandler(filters.TEXT, user_input_handler))
     application.add_handler(CommandHandler('start', user_input_handler))
     for template in Template.objects.all():
-        MessageTemplates.templates[template.name] = template.content.replace(
-            '<div>', '').replace('</div>', '').replace('<br />', '').replace('&nbsp;', '')
+        MessageTemplates.templates[template.name] = (
+            template.content
+            .replace('<div>', '').replace('</div>', '')
+            .replace('<br />', '').replace('&nbsp;', '')
+            .replace('<p>', '').replace('</p>', '')
+        )
+
+    for teacher in Teacher.objects.filter(is_active=True):
+        photo_path = teacher.photo.path
+        description = (
+            teacher.description
+            .replace('<div>', '').replace('</div>', '')
+            .replace('<br />', '').replace('&nbsp;', '')
+            .replace('<p>', '').replace('</p>', '')
+        )
+        caption = (f"<b>{teacher.name}</b>\n<i>{teacher.role}</i>\n\n{description}")
+
+        MessageTeachers.teachers.append(
+            {
+                "photo_path": photo_path,
+                "caption": caption
+            }
+        )
     try:
         if settings.BOT_MODE == 'webhook':
             logger.warning('Bot started in WEBHOOK mode')

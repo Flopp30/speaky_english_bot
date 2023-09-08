@@ -1,4 +1,5 @@
 from django.db import models
+from tinymce.models import HTMLField
 
 from utils.models import NULLABLE, NOT_NULLABLE
 
@@ -54,3 +55,19 @@ class User(models.Model):
     class Meta:
         verbose_name = 'Пользователь'
         verbose_name_plural = 'Пользователи'
+
+
+class Teacher(models.Model):
+    name = models.CharField(verbose_name='ФИО', max_length=128, **NOT_NULLABLE)
+    role = models.CharField(verbose_name='Роль', max_length=128, **NULLABLE)
+    description = models.TextField(verbose_name='Описание', default='', **NULLABLE)
+    photo = models.ImageField(
+        upload_to='teacher_photos/',
+        verbose_name="Фотография преподавателя",
+        **NOT_NULLABLE,
+    )
+    is_active = models.BooleanField(verbose_name='Активен?', **NOT_NULLABLE, default=True)
+
+    class Meta:
+        verbose_name = 'Преподаватель'
+        verbose_name_plural = 'Преподаватели'
