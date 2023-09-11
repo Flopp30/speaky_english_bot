@@ -30,7 +30,7 @@ SECRET_KEY = env(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool('DJ_DEBUG', True)
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 TELEGRAM_TOKEN = env('TG_TOKEN')
 # Application definition
@@ -39,8 +39,12 @@ BOT_MODE = env('BOT_MODE', 'polling')
 
 LOG_LEVEL = env.int('LOG_LEVEL', 10)
 
+TG_BOT_URL = env('BOT_UTL', 'https://google.com/')
+
 # YOOKASSA definition
-YOO_TOKEN = env('YOO_TOKEN', 'test_Ks28CdC0JlNMNJGi6yu3DQnYMyTasOQD001a9TMh3Wg')
+# YOO_TOKEN = env('YOO_TOKEN', 'test_Ks28CdC0JlNMNJGi6yu3DQnYMyTasOQD001a9TMh3Wg')  # Дашин токен
+YOO_TOKEN = env('YOO_TOKEN', 'test_MC3lMB_QVPrNgwbvtTAYXMnBvPzc0Nez5-mzvCCchIk')  # Мой токен
+YOO_SHOP_ID = env('SHOP_ID', '210134')  # Мой шоп id
 
 INSTALLED_APPS = [
     'django.contrib.admin',
