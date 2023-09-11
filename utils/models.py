@@ -7,4 +7,4 @@ class MessageTemplates:
 
 
 class MessageTeachers:
-    teachers: list[{str: str}] = []
+    teachers: list[dict[str, str]] = []

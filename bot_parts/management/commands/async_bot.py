@@ -395,9 +395,11 @@ async def personal_lessons_start(update: Update, context: ContextTypes.DEFAULT_T
         text=text,
         parse_mode='HTML',
     )
+    message = None
     if MessageTeachers.teachers:
         teacher_info = MessageTeachers.teachers[0]
-        photo_path, caption = teacher_info.get("photo_path"), teacher_info.get("caption")
+        photo_path, caption = teacher_info.get(
+            "photo_path"), teacher_info.get("caption")
         with open(photo_path, 'rb') as photo_file:
             message = await context.bot.send_photo(
                 chat_id=chat_id,
@@ -411,11 +413,6 @@ async def personal_lessons_start(update: Update, context: ContextTypes.DEFAULT_T
         context.chat_data.update({"message_id": message.id})
     await context.bot.send_message(
         chat_id=chat_id,
-        text=text,
-        parse_mode='HTML',
-    )
-    await context.bot.send_message(
-        chat_id=chat_id,
         text='По ссылке ты можешь заполнить анкету',
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard),
@@ -426,24 +423,30 @@ async def personal_lessons_start(update: Update, context: ContextTypes.DEFAULT_T
 async def teacher_pagination(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     message_id = context.chat_data.get('message_id')
-    current_list_position = context.chat_data.get('current_teacher_list_position', 0)
+    current_list_position = context.chat_data.get(
+        'current_teacher_list_position', 0)
     pagination_keyboard = [
         [InlineKeyboardButton(text='<<', callback_data='TEACHER_PREV')],
         [InlineKeyboardButton(text='>>', callback_data='TEACHER_NEXT')]
     ]
-    if not update.callback_query or not message_id:
+    if not update.callback_query:
+        return 'TEACHER_PAGINATION'
+    if not message_id:
         return 'START'
     elif update.callback_query.data in ('TEACHER_PREV', 'TEACHER_NEXT'):
         new_position = current_list_position
-        if update.callback_query.data == "TEACHER_PREV" and current_list_position > 0:
-            new_position = current_list_position - 1
-        elif update.callback_query.data == 'TEACHER_NEXT' and current_list_position < len(MessageTeachers.teachers) - 1:
-            new_position = current_list_position + 1
+        if update.callback_query.data == "TEACHER_PREV":
+            new_position = (current_list_position -
+                            1) % len(MessageTeachers.teachers)
+        elif update.callback_query.data == 'TEACHER_NEXT':
+            new_position = (current_list_position +
+                            1) % len(MessageTeachers.teachers)
 
         if new_position != current_list_position:
             teacher_info = MessageTeachers.teachers[new_position]
 
-            photo_path, caption = teacher_info.get('photo_path'), teacher_info.get('caption')
+            photo_path, caption = teacher_info.get(
+                'photo_path'), teacher_info.get('caption')
             with open(photo_path, 'rb') as photo_file:
                 new_photo = InputMediaPhoto(photo_file)
                 await context.bot.edit_message_media(
@@ -458,10 +461,11 @@ async def teacher_pagination(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     parse_mode='HTML',
                     reply_markup=InlineKeyboardMarkup(pagination_keyboard)
                 )
-            context.chat_data.update({'current_teacher_list_position': new_position})
+            context.chat_data.update(
+                {'current_teacher_list_position': new_position})
             context.chat_data.update({'message_id': message.id})
         return 'TEACHER_PAGINATION'
-    return
+    return 'START'
 
 
 async def user_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -491,6 +495,7 @@ async def user_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         'LOWER_LEVEL_CHOICE': handle_lower_level_choice,
         'AWAIT_VOICE': handle_voice_test,
         'TEACHER_PAGINATION': teacher_pagination,
+        'AWAIT_ADMIN_CHOICE': handle_admin_choice,
     }
 
     state_handler = states_function[user_state]
@@ -531,7 +536,8 @@ def main():
             .replace('<br />', '').replace('&nbsp;', '')
             .replace('<p>', '').replace('</p>', '')
         )
-        caption = (f"<b>{teacher.name}</b>\n<i>{teacher.role}</i>\n\n{description}")
+        caption = (
+            f"<b>{teacher.name}</b>\n<i>{teacher.role}</i>\n\n{description}")
 
         MessageTeachers.teachers.append(
             {
