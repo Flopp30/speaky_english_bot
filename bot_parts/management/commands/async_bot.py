@@ -11,7 +11,7 @@ from textwrap import dedent
 from asgiref.sync import sync_to_async
 from django.template import Context, Template as DjTemplate
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice, InputFile, InputMediaPhoto
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, InputFile, InputMediaPhoto
 from telegram.ext import (ApplicationBuilder, ContextTypes,
                           CommandHandler, MessageHandler, CallbackQueryHandler, PreCheckoutQueryHandler,
                           filters)
@@ -21,10 +21,13 @@ from django.core.management.base import BaseCommand
 from django.db.models import Count
 from django.utils import timezone
 
+from payment.models import Payment
+from product.models import Product
 from templates.models import Template
 from subscription.models import Subscription
 from user.models import User, Teacher
 from utils.models import MessageTemplates, MessageTeachers
+from utils.services import get_yoo_payment
 
 logger = logging.getLogger('tbot')
 
@@ -213,12 +216,36 @@ async def speak_club_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_speak_club_level_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
     if not update.callback_query:
         return 'SPEAK_CLUB_LEVEL_CHOICE'
-    if update.callback_query.data == 'upper':
-        return  # TODO Сделать оплату
-    elif update.callback_query.data == 'advanced':
-        return  # TODO Сделать оплату
+    if update.callback_query.data in ('upper', 'advanced'):
+        user = context.user_data['user'] or await User.objects.aget(chat_id=chat_id)
+        product = await Product.objects.aget(name="Разговорный клуб")
+        yoo_payment = get_yoo_payment(
+            payment_amount=product.price,
+            payment_currency=product.currency,
+            product_name=product.name,
+            sub_period='1 месяц',
+            metadata={'product_id': product.id, "user_id": user.id, "english_lvl": update.callback_query.data}
+        )
+        url = yoo_payment.get("confirmation", dict()).get("confirmation_url", None)
+        keyboard = [
+            [InlineKeyboardButton(f'Оплатить {product.price} {product.currency}', web_app=WebAppInfo(url=url))],
+        ]
+        await Payment.objects.acreate(
+            status=yoo_payment.get('status'),
+            payment_service_id=yoo_payment.get('id'),
+            amount=yoo_payment.get('amount').get('value'),
+            currency=yoo_payment.get('amount').get('currency'),
+            user=user
+        )
+        await context.bot.send_message(
+            chat_id,
+            text="Ссылка на оплату месячной подписки:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return "START"  # TODO действие после отправки ссылки
     elif update.callback_query.data == 'lower':
         return await speak_club_lower(update, context)
     else:
@@ -638,6 +665,7 @@ async def user_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         'AWAIT_ADMIN_GROUP_CHOICE': handle_admin_group_choice,
         'AWAIT_MESSAGE_FOR_GROUP': prepare_message_for_group,
         'AWAIT_GROUP_MESSAGE_CONFIRMATION': send_message_for_group,
+        # 'AWAIT_ADMIN_CHOICE': handle_admin_choice,
     }
 
     state_handler = states_function[user_state]
