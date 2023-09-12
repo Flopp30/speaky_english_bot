@@ -22,6 +22,7 @@ from django.db.models import Count
 from django.utils import timezone
 
 from templates.models import Template
+from subscription.models import Subscription
 from user.models import User, Teacher
 from utils.models import MessageTemplates, MessageTeachers
 
@@ -52,6 +53,12 @@ class TelegramLogsHandler(logging.Handler):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
+    context.user_data['user'], _ = await User.objects.aget_or_create(
+        chat_id=chat_id,
+        defaults={
+            'username': update.effective_chat.username
+        }
+    )
     if context.user_data['user'].is_superuser:
         return await staff_functions_select(update, context)
     if context.user_data['user'].state != 'NEW':
@@ -468,6 +475,138 @@ async def teacher_pagination(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return 'START'
 
 
+async def handle_admin_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    if not update.callback_query:
+        return 'AWAIT_ADMIN_CHOICE'
+    if update.callback_query.data == 'users':
+        now = datetime.now()
+        subscriptions = Subscription.objects.filter(
+            sub_start_date__lte=now, unsub_date__gte=now).select_related('product', 'user')
+        groups = {}
+        async for subscription in subscriptions:
+            groups[subscription.product.name] = groups.get(
+                subscription.product.name, []) + [subscription.user.username]
+        groups_texts = '\n'.join(
+            [f'<b>{key}<b/>: {", ".join(value)}' for key, value in groups.items()])
+        text = dedent(f"""
+        В настоящее время активно {len(subscriptions)} подписок.
+        Следующие группы:
+        {groups_texts}
+        Хотите отправить сообщения учащимся в группу?
+    """)
+        keyboard = [
+            [InlineKeyboardButton(f'{key}', callback_data=key)
+             for key in groups.keys()]
+        ] + [[InlineKeyboardButton('В главное меню', callback_data='start')]]
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+        await context.bot.delete_message(
+            chat_id=chat_id,
+            message_id=update.effective_message.message_id
+        )
+        return 'AWAIT_ADMIN_GROUP_CHOICE'
+    return 'AWAIT_ADMIN_CHOICE'
+
+
+async def handle_admin_group_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    if not update.callback_query:
+        return 'AWAIT_ADMIN_GROUP_CHOICE'
+    response = update.callback_query.data
+    if response == 'start':
+        return await start(update, context)
+    context.chat_data['group_for_message'] = response
+    keyboard = [
+        [InlineKeyboardButton('Вернуться к выбору групп',
+                              callback_data='back')]
+    ]
+    text = dedent(f"""
+    Введите сообщение, которое бы вы хотели отправить учащимся группы {response}.
+""")
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+    await context.bot.delete_message(
+        chat_id=chat_id,
+        message_id=update.effective_message.message_id
+    )
+    return 'AWAIT_MESSAGE_FOR_GROUP'
+
+
+async def prepare_message_for_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    if update.callback_query and update.callback_query.data == 'back':
+        return await handle_admin_choice(update, context)
+    if update.message and update.message.text:
+        group_name = context.chat_data.get('group_for_message')
+        context.chat_data['message_to_send'] = update.message
+        keyboard = [
+            [InlineKeyboardButton('Отправить', callback_data='confirm'),
+             InlineKeyboardButton('Изменить', callback_data='edit')],
+        ]
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=update.message.text,
+            entities=update.message.entities,
+        )
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"Хотите отправить такое сообщение учащимся группы {group_name}?",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+        return 'AWAIT_GROUP_MESSAGE_CONFIRMATION'
+
+
+async def send_message_for_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    if not update.callback_query:
+        return 'AWAIT_GROUP_MESSAGE_CONFIRMATION'
+    group_name = context.chat_data.get('group_for_message')
+    if update.callback_query.data == 'edit':
+        keyboard = [
+            [InlineKeyboardButton(
+                'Вернуться к выбору групп', callback_data='back')]
+        ]
+        text = dedent(f"""
+        Введите сообщение, которое бы вы хотели отправить учащимся группы {group_name}.
+    """)
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+        await context.bot.delete_message(
+            chat_id=chat_id,
+            message_id=update.effective_message.message_id
+        )
+        return 'AWAIT_MESSAGE_FOR_GROUP'
+    if update.callback_query.data != 'confirm':
+        return await 'AWAIT_GROUP_MESSAGE_CONFIRMATION'
+    group_subscriptions = Subscription.objects.select_related(
+        'product', 'user').filter(product__name=group_name)
+    message_to_send = context.chat_data['message_to_send']
+    for subscription in group_subscriptions:
+        await context.bot.send_message(
+            chat_id=subscription.user.chat_id,
+            text=message_to_send.message.text,
+            entities=message_to_send.entities,
+        )
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=f'Сообщение отправлено учащимся группы {group_name}'
+    )
+    return await start(update, context)
+
+
 async def user_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if not context.user_data.get('user'):
@@ -496,6 +635,9 @@ async def user_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         'AWAIT_VOICE': handle_voice_test,
         'TEACHER_PAGINATION': teacher_pagination,
         'AWAIT_ADMIN_CHOICE': handle_admin_choice,
+        'AWAIT_ADMIN_GROUP_CHOICE': handle_admin_group_choice,
+        'AWAIT_MESSAGE_FOR_GROUP': prepare_message_for_group,
+        'AWAIT_GROUP_MESSAGE_CONFIRMATION': send_message_for_group,
     }
 
     state_handler = states_function[user_state]
