@@ -227,7 +227,12 @@ async def handle_speak_club_level_choice(update: Update, context: ContextTypes.D
             payment_currency=product.currency,
             product_name=product.name,
             sub_period='1 месяц',
-            metadata={'product_id': product.id, "user_id": user.id, "english_lvl": update.callback_query.data}
+            metadata={
+                'product_id': product.id,
+                "user_id": user.id,
+                "english_lvl": update.callback_query.data,
+                "chat_id": chat_id,
+            }
         )
         url = yoo_payment.get("confirmation", dict()).get("confirmation_url", None)
         keyboard = [
