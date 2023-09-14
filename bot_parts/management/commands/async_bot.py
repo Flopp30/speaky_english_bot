@@ -27,7 +27,7 @@ from templates.models import Template
 from subscription.models import Subscription
 from user.models import User, Teacher
 from utils.models import MessageTemplates, MessageTeachers
-from utils.services import get_yoo_payment
+from utils.services import get_yoo_payment, renew_sub
 
 logger = logging.getLogger('tbot')
 
@@ -689,7 +689,6 @@ def main():
     stream_handler.setLevel(settings.LOG_LEVEL)
     # stream_handler.setLevel(logging.DEBUG)
     logger.addHandler(stream_handler)
-
     application = ApplicationBuilder().token(settings.TELEGRAM_TOKEN).build()
 
     application.add_handler(CallbackQueryHandler(user_input_handler))

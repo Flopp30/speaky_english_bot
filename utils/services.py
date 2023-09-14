@@ -1,8 +1,13 @@
+import datetime
 import json
 import uuid
 
 from django.conf import settings
 from yookassa import Payment as Yoo_Payment, Configuration
+
+from payment.models import Payment
+from product.models import Product
+from subscription.models import Subscription
 
 Configuration.account_id = settings.YOO_SHOP_ID
 Configuration.secret_key = settings.YOO_TOKEN
@@ -16,7 +21,7 @@ def get_yoo_payment(payment_amount, payment_currency, product_name, sub_period, 
             "value": payment_amount,
             "currency": payment_currency,
         },
-        "metadata": metadata,
+        "metadata": metadata | {"renew": False},
         "payment_method_data": {
             "type": "bank_card"
         },
@@ -30,7 +35,6 @@ def get_yoo_payment(payment_amount, payment_currency, product_name, sub_period, 
     }, idempotence_key)
 
     return json.loads(payment.json())
-
 # {
 # 	'amount':
 # 	{
@@ -67,22 +71,38 @@ def get_yoo_payment(payment_amount, payment_currency, product_name, sub_period, 
 # }
 
 
-# payment = get_yoo_payment(payment_amount=100, payment_currency='RUB', product_name='WOW', sub_period='12 дней')
-# print(payment)
-# url = payment.get("confirmation", dict()).get("confirmation_url", None)
-# print(url)
+def get_auto_payment(sub: Subscription, product: Product, metadata: dict = {}):
+    idempotence_key = str(uuid.uuid4())
+    payment = Yoo_Payment.create(
+        {
+            "amount": {
+                "value": product.price,
+                "currency": product.currency,
+            },
+            "metadata": metadata,
+            "capture": True,
+            "payment_method_id": sub.verified_payment_id,
+            "description": f"Продление подписки по тарифу '{product.name}' на срок 1 месяц",
+        }, idempotence_key
+    )
+    return json.loads(payment.json())
 
-# def get_auto_payment(sub: Subscription, user: User):
-#     idempotence_key = str(uuid.uuid4())
-#     payment = Yoo_Payment.create(
-#         {
-#             "amount": {
-#                 "value": sub.payment_amount,
-#                 "currency": sub.payment_currency,
-#             },
-#             "capture": True,
-#             "payment_method_id": user.verified_payment_id,
-#             "description": f"Продление подписки по тарифу '{sub.humanize_name}' на срок {sub.payment_name}",
-#         }, idempotence_key
-#     )
-#     return json.loads(payment.json())
+
+def renew_sub():
+    now = datetime.datetime.now()
+    expired_subs = Subscription.objects.filter(unsub_date__lte=now, is_active=True).select_related('product', 'user')
+    for sub in expired_subs:
+        metadata = {
+            "sub_id": sub.id,
+            "user_id": sub.user.id,
+            "chat_id": sub.user.chat_id,
+            "renew": True,
+        }
+        yoo_payment = get_auto_payment(sub=sub, product=sub.product, metadata=metadata)
+        Payment.objects.create(
+            status=yoo_payment.get('status'),
+            payment_service_id=yoo_payment.get('id'),
+            amount=yoo_payment.get('amount').get('value'),
+            currency=yoo_payment.get('amount').get('currency'),
+            user=sub.user
+        )

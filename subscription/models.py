@@ -40,11 +40,15 @@ class Subscription(models.Model):
         **NOT_NULLABLE
     )
 
-    @property
-    def is_active(self):
-        now = datetime.now()
-        return self.sub_start_date <= now <= self.unsub_date
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name='Активна?'
+    )
 
+    # @property
+    # def is_active(self):
+    #     now = datetime.now()
+    #     return self.sub_start_date <= now <= self.unsub_date
 
     class Meta:
         verbose_name = 'Подписка'

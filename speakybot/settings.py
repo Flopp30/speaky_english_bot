@@ -40,6 +40,7 @@ BOT_MODE = env('BOT_MODE', 'polling')
 LOG_LEVEL = env.int('LOG_LEVEL', 10)
 
 TG_BOT_URL = env('BOT_UTL', 'https://google.com/')
+TELEGRAM_API_URL = f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/'
 
 # YOOKASSA definition
 # YOO_TOKEN = env('YOO_TOKEN', 'test_Ks28CdC0JlNMNJGi6yu3DQnYMyTasOQD001a9TMh3Wg')  # Дашин токен
