@@ -53,7 +53,7 @@ class TelegramLogsHandler(logging.Handler):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    context.user_data['user'], _ = await User.objects.aget_or_create(
+    context.user_data['user'], _ = await User.objects.prefetch_related('subscriptions').aget_or_create(
         chat_id=chat_id,
         defaults={
             'username': update.effective_chat.username
@@ -105,6 +105,8 @@ async def staff_functions_select(update: Update, context: ContextTypes.DEFAULT_T
 
 async def welcome_letter(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
+    context.bot_data['user']['subscriptions'] = context.bot_data['user'].subscriptions.filter(
+        is_active=True).select_related('product')
     keyboard = [
         [InlineKeyboardButton("Разговорный клуб", callback_data='speak_club')],
         [InlineKeyboardButton("Групповые занятия",
@@ -112,6 +114,9 @@ async def welcome_letter(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("Индивидуальные занятия",
                               callback_data='personal_lessons')],
     ]
+    if context.bot_data['user']['subscriptions']:
+        keyboard.append([InlineKeyboardButton(
+            'Ваши активные подписки', callback_data='current_subscriptions')])
     text = MessageTemplates.templates.get('welcome_letter', 'Нужен шаблон welcome_letter. {username}').format(
         username=context.user_data['user'].username)
     await context.bot.send_message(
@@ -130,12 +135,116 @@ async def welcome_letter(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_welcome_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.callback_query:
         return 'WELCOME_CHOICE'
-    if update.callback_query.data == 'speak_club':
-        return await speak_club_start(update, context)
-    elif update.callback_query.data == 'group_lessons':
-        return await group_club_start(update, context)
+    choices = {
+        'speak_club': speak_club_start,
+        'group_lessons': group_club_start,
+        'personal_lessons': personal_lessons_start,
+        'current_subscriptions': show_current_subscriptions,
+    }
+    if (callback := choices.get(update.callback_query.data)):
+        return callback(update, context)
+    return 'WELCOME_CHOICE'
+
+
+async def show_current_subscriptions(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    keyboard = [
+        [InlineKeyboardButton(
+            f'{subscription.product.name}', callback_data=subscription.id)]
+        for subscription in context.bot_data['user']['subscriptions']
+    ]
+    keyboard.append([InlineKeyboardButton('Назад', callback_data='back')])
+    subs_text = '\n'.join([f"{subscription.product.name} до {subscription.unsub_date.strftime('%Y-%m-%d')}\
+                           {'автопродление включено' if subscription.is_auto_renew else ''}"
+                           for subscription in context.bot_data['user']['subscriptions']])
+    text = dedent(f"""В настоящее время вы подписаны на следующие продукты:
+                  {subs_text}
+                  Хотите отредактировать свои текущие подписки?""")
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    await context.bot.delete_message(
+        chat_id=chat_id,
+        message_id=update.effective_message.message_id
+    )
+    return 'USER_SUBSCRIPTIONS_CHOICE'
+
+
+async def handle_user_subscriptions_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.callback_query:
+        return 'USER_SUBSCRIPTIONS_CHOICE'
+    if update.callback_query.data == 'back':
+        return welcome_letter(update, context)
+    chat_id = update.effective_chat.id
+    try:
+        sub_id = int(update.callback_query.data)
+    except ValueError:
+        return 'USER_SUBSCRIPTIONS_CHOICE'
+    subscription = context.bot_data['user']['subscriptions'].filter(
+        id=sub_id).first()
+    if not subscription:
+        return 'USER_SUBSCRIPTIONS_CHOICE'
+    text = dedent(f"""Подписка на {subscription.product.name}
+    Стоимость {(str(subscription.product.price_rub) + 'р.') if subscription.product.price_rub
+               else '$' + str(subscription.product.price_usd)}
+    Активна до {subscription.unsub_date.strftime('%Y-%m-%d')}
+    Автопродление {'включено' if subscription.is_auto_renew else 'отключено'}
+""")
+    keyboard = [
+        [InlineKeyboardButton('Отключить автопродление',
+                              callback_data=f'turn_off-{subscription.id}')]
+        if subscription.is_auto_renew else
+        [InlineKeyboardButton('Включить автопродление',
+                              callback_data=f'turn_on-{subscription.id}')],
+        [InlineKeyboardButton('Назад', 'back')]
+    ]
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    await context.bot.delete_message(
+        chat_id=chat_id,
+        message_id=update.effective_message.message_id
+    )
+    return 'AWAIT_SUBSCRIPTION_ACTION'
+
+
+async def handle_subscription_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.callback_query:
+        return 'AWAIT_SUBSCRIPTION_ACTION'
+    if update.callback_query.data == 'back':
+        return show_current_subscriptions(update, context)
+    chat_id = update.effective_chat.id
+    try:
+        action, sub_id = update.callback_query.data.split('-')
+    except ValueError:
+        return 'AWAIT_SUBSCRIPTION_ACTION'
+    subscription = context.bot_data['user']['subscriptions'].filter(
+        id=sub_id).first()
+    if not subscription:
+        return 'AWAIT_SUBSCRIPTION_ACTION'
+    if action == 'turn_on':
+        subscription.is_auto_renew = True
+        subscription.save()
+        text = f'Автопродление подписки на {subscription.product.name} включено'
+    elif action == 'turn_off':
+        subscription.is_auto_renew = False
+        subscription.save()
+        text = f'Автопродление подписки на {subscription.product.name} отключено'
     else:
-        return await personal_lessons_start(update, context)
+        return 'AWAIT_SUBSCRIPTION_ACTION'
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=text
+    )
+    await context.bot.delete_message(
+        chat_id=chat_id,
+        message_id=update.effective_message.message_id
+    )
+    return 'START'
 
 
 async def speak_club_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -203,6 +312,14 @@ async def speak_club_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='HTML',
     )
     await sleep(3)
+    if 'speak_club' in context.bot_data['user']['subscriptions'].values_list('product__name'):
+        text_4 = 'Поздравляем! У вас уже есть активная подписка на разговорный клуб. Ждем на следующем занятии'
+        await context.bot.send_message(
+            chat_id,
+            text=text_4,
+            parse_mode='HTML',
+        )
+        return 'START'
     await context.bot.send_message(
         chat_id,
         text=text_4,
@@ -366,6 +483,14 @@ async def group_club_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='HTML',
     )
     await sleep(3)
+    if 'group_club' in context.bot_data['user']['subscriptions'].values_list('product__name'):
+        text_4 = 'Поздравляем! У вас уже есть активная подписка на групповые занятия. Ждем на следующем уроке'
+        await context.bot.send_message(
+            chat_id,
+            text=text_4,
+            parse_mode='HTML',
+        )
+        return 'START'
     await context.bot.send_message(
         chat_id=chat_id,
         text=text_3,
@@ -418,6 +543,14 @@ async def personal_lessons_start(update: Update, context: ContextTypes.DEFAULT_T
     if message:
         context.chat_data.update({"current_teacher_list_position": 0})
         context.chat_data.update({"message_id": message.id})
+    if 'personal_lessons' in context.bot_data['user']['subscriptions'].values_list('product__name'):
+        text_4 = 'Поздравляем! У вас уже есть активная подписка на индивидуальные занятия'
+        await context.bot.send_message(
+            chat_id,
+            text=text_4,
+            parse_mode='HTML',
+        )
+        return 'TEACHER_PAGINATION'
     await context.bot.send_message(
         chat_id=chat_id,
         text='По ссылке ты можешь заполнить анкету',
@@ -480,9 +613,8 @@ async def handle_admin_choice(update: Update, context: ContextTypes.DEFAULT_TYPE
     if not update.callback_query:
         return 'AWAIT_ADMIN_CHOICE'
     if update.callback_query.data == 'users':
-        now = datetime.now()
         subscriptions = Subscription.objects.filter(
-            sub_start_date__lte=now, unsub_date__gte=now).select_related('product', 'user')
+            is_active=True).select_related('product', 'user')
         groups = {}
         async for subscription in subscriptions:
             groups[subscription.product.name] = groups.get(
@@ -610,7 +742,7 @@ async def send_message_for_group(update: Update, context: ContextTypes.DEFAULT_T
 async def user_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if not context.user_data.get('user'):
-        context.user_data['user'], _ = await User.objects.aget_or_create(
+        context.user_data['user'], _ = await User.objects.prefetch_related('subscriptions').aget_or_create(
             chat_id=chat_id,
             defaults={
                 'username': update.effective_chat.username
@@ -638,6 +770,8 @@ async def user_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         'AWAIT_ADMIN_GROUP_CHOICE': handle_admin_group_choice,
         'AWAIT_MESSAGE_FOR_GROUP': prepare_message_for_group,
         'AWAIT_GROUP_MESSAGE_CONFIRMATION': send_message_for_group,
+        'AWAIT_SUBSCRIPTION_ACTION': handle_subscription_action,
+        'USER_SUBSCRIPTIONS_CHOICE': handle_user_subscriptions_choice
     }
 
     state_handler = states_function[user_state]
