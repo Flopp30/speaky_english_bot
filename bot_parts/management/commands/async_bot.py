@@ -20,6 +20,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db.models import Count
 from django.utils import timezone
+from yookassa import Configuration
 
 from payment.models import Payment
 from product.models import Product
@@ -27,7 +28,8 @@ from templates.models import Template
 from subscription.models import Subscription
 from user.models import User, Teacher
 from utils.models import MessageTemplates, MessageTeachers
-from utils.services import get_yoo_payment, renew_sub
+from utils.services import get_yoo_payment
+from utils.periodic_tasks import renew_sub_hourly
 
 logger = logging.getLogger('tbot')
 
@@ -680,6 +682,7 @@ async def user_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 def main():
+
     import tracemalloc
     tracemalloc.start()
     # telegram_handler = TelegramLogsHandler(settings.ADMIN_TG_BOT, settings.ADMIN_TG_CHAT)
@@ -690,6 +693,8 @@ def main():
     # stream_handler.setLevel(logging.DEBUG)
     logger.addHandler(stream_handler)
     application = ApplicationBuilder().token(settings.TELEGRAM_TOKEN).build()
+    job_queue = application.job_queue
+    job_queue.run_repeating(renew_sub_hourly, interval=timedelta(hours=1), first=5)
 
     application.add_handler(CallbackQueryHandler(user_input_handler))
     application.add_handler(MessageHandler(filters.TEXT, user_input_handler))
