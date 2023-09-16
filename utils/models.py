@@ -1,3 +1,5 @@
+import logging
+
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
@@ -18,9 +20,9 @@ class MessageTemplates:
         return cls.templates.get(key, cls.default_message.format(key=key))
 
     @classmethod
-    def load_templates(cls):
+    async def load_templates(cls, context):
         cls.templates = {}
-        for template in Template.objects.all():
+        async for template in Template.objects.all():
             cls.templates[template.name] = (
                 template.content
                 .replace('<div>', '').replace('</div>', '')
@@ -38,9 +40,9 @@ class MessageTeachers:
     teachers: list[dict[str, str]] = []
 
     @classmethod
-    def load_teachers(cls):
+    async def load_teachers(cls, context):
         cls.teachers = []
-        for teacher in Teacher.objects.filter(is_active=True):
+        async for teacher in Teacher.objects.filter(is_active=True):
             photo_path = teacher.photo.path
             description = (
                 teacher.description

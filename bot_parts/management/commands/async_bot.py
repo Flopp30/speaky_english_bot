@@ -733,7 +733,6 @@ async def user_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         'AWAIT_GROUP_MESSAGE_CONFIRMATION': send_message_for_group,
         'AWAIT_SUBSCRIPTION_ACTION': handle_subscription_action,
         'USER_SUBSCRIPTIONS_CHOICE': handle_user_subscriptions_choice
-        # 'AWAIT_ADMIN_CHOICE': handle_admin_choice,
     }
 
     state_handler = states_function[user_state]
@@ -749,9 +748,9 @@ async def reload_from_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     if key == settings.INTERNAL_MESSAGE_KEY:
         if command == '!reload_teachers':
-            MessageTeachers.load_teachers()
+            await MessageTeachers.load_teachers(context)
         elif command == '!reload_templates':
-            MessageTemplates.load_templates()
+            await MessageTemplates.load_templates(context)
 
 
 def main():
@@ -769,8 +768,8 @@ def main():
     job_queue = application.job_queue
     job_queue.run_repeating(
         renew_sub_hourly, interval=timedelta(hours=1), first=5)
-    job_queue.run_repeating(MessageTemplates.load_templates, interval=timedelta(minutes=10), first=0)
-    job_queue.run_repeating(MessageTeachers.load_teachers, interval=timedelta(minutes=10), first=0)
+    job_queue.run_repeating(MessageTemplates.load_templates, interval=timedelta(minutes=10), first=1)
+    job_queue.run_repeating(MessageTeachers.load_teachers, interval=timedelta(minutes=10), first=1)
 
     application.add_handler(PrefixHandler(
         '!', ['reload_templates', 'reload_teachers'], reload_from_db))
