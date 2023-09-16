@@ -50,6 +50,8 @@ YOO_TOKEN = env(
     'YOO_TOKEN', 'test_MC3lMB_QVPrNgwbvtTAYXMnBvPzc0Nez5-mzvCCchIk')  # Мой токен
 YOO_SHOP_ID = env('SHOP_ID', '210134')  # Мой шоп id
 
+INTERNAL_KEY = env('INTERNAL_KEY', 'qertywgbt4wef2d13fg4236j7k64jrydg')
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',

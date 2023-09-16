@@ -13,7 +13,7 @@ from django.template import Context, Template as DjTemplate
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, InputFile, InputMediaPhoto
 from telegram.ext import (ApplicationBuilder, ContextTypes,
-                          CommandHandler, MessageHandler, CallbackQueryHandler, PreCheckoutQueryHandler,
+                          CommandHandler, MessageHandler, CallbackQueryHandler, PreCheckoutQueryHandler, PrefixHandler,
                           filters)
 
 from django.conf import settings
@@ -742,6 +742,18 @@ async def user_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await context.user_data['user'].asave()
 
 
+async def reload_from_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        command, key = update.message.text.split('|')
+    except ValueError:
+        return
+    if key == settings.INTERNAL_MESSAGE_KEY:
+        if command == '!reload_teachers':
+            MessageTeachers.load_teachers()
+        elif command == '!reload_templates':
+            MessageTemplates.load_templates()
+
+
 def main():
 
     import tracemalloc
@@ -757,35 +769,15 @@ def main():
     job_queue = application.job_queue
     job_queue.run_repeating(
         renew_sub_hourly, interval=timedelta(hours=1), first=5)
+    job_queue.run_repeating(MessageTemplates.load_templates, interval=timedelta(minutes=10), first=0)
+    job_queue.run_repeating(MessageTeachers.load_teachers, interval=timedelta(minutes=10), first=0)
 
+    application.add_handler(PrefixHandler(
+        '!', ['reload_templates', 'reload_teachers'], reload_from_db))
     application.add_handler(CallbackQueryHandler(user_input_handler))
     application.add_handler(MessageHandler(filters.TEXT, user_input_handler))
     application.add_handler(CommandHandler('start', user_input_handler))
-    for template in Template.objects.all():
-        MessageTemplates.templates[template.name] = (
-            template.content
-            .replace('<div>', '').replace('</div>', '')
-            .replace('<br />', '').replace('&nbsp;', '')
-            .replace('<p>', '').replace('</p>', '')
-        )
 
-    for teacher in Teacher.objects.filter(is_active=True):
-        photo_path = teacher.photo.path
-        description = (
-            teacher.description
-            .replace('<div>', '').replace('</div>', '')
-            .replace('<br />', '').replace('&nbsp;', '')
-            .replace('<p>', '').replace('</p>', '')
-        )
-        caption = (
-            f"<b>{teacher.name}</b>\n<i>{teacher.role}</i>\n\n{description}")
-
-        MessageTeachers.teachers.append(
-            {
-                "photo_path": photo_path,
-                "caption": caption
-            }
-        )
     try:
         if settings.BOT_MODE == 'webhook':
             logger.warning('Bot started in WEBHOOK mode')
