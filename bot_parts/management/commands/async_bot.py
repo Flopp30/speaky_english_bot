@@ -251,44 +251,10 @@ async def handle_subscription_action(update: Update, context: ContextTypes.DEFAU
 
 async def speak_club_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    text_1 = dedent("""
-        ⭐ <b>Разговорный клуб</b> поможет:
-
-        💡говорить без страха
-        💡вывести знания из пассива в актив
-        💡пополнить словарный запас живой лексикой
-        💡звучать натуральнее и естественнее
-        💡не растерять уровень, а нарастить
-
-        <b>Формат и цена</b>
-        основное общение в парах
-        встречи в Zoom по 60 минут
-        стоимость встречи 1000руб, оплата за месяц
-
-        🎁 <b>Только в сентябре: 3000руб/месяц</b>
-        *скидка 1000руб сохранится до конца года для всех, вступивших в сентябре и занимающихся каждый месяц
-    """)
-    text_2 = dedent("""
-        <b>Как проходит:</b>
-
-        заранее ты получаешь файл с темой встречи, ссылками на статью / видео
-
-        Quizlet с полезной лексикой по теме для подготовки
-
-        ко встрече ты уже знаешь, что говорить (посмотрел / почитал об этом) и как говорить (изучил лексику из Quizlet)
-
-        на встрече ты много общаешься в паре с peers, учителем, получаешь обратную связь, прокачиваешь навыкs peaking по полной
-    """)
-    text_3 = dedent("""
-        <b>Расписание:</b>
-
-        🔘High Inter / Upper-Inter
-        СР, 19:00 по мск
-
-        🔘Advanced
-        ЧТ, 19:00 по мск
-    """)
-    text_4 = "<b>Выбери свой уровень</b>"
+    text_1 = MessageTemplates.get('speaky_club_1')
+    text_2 = MessageTemplates.get('speaky_club_2')
+    text_3 = MessageTemplates.get('speaky_club_3')
+    text_4 = MessageTemplates.get('speaky_club_4')
     keyboard = [
         [InlineKeyboardButton('High Inter / Upper', callback_data='upper')],
         [InlineKeyboardButton('Advanced', callback_data='advanced')],
@@ -314,8 +280,8 @@ async def speak_club_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='HTML',
     )
     await sleep(3)
-    if 'speak_club' in [subscription.product.name for subscription in context.user_data['subscriptions'].values()]:
-        text_4 = 'Поздравляем! У вас уже есть активная подписка на разговорный клуб. Ждем на следующем занятии'
+    if 'speaky_club' in [subscription.product.id_name for subscription in context.user_data['subscriptions'].values()]:
+        text_4 = MessageTemplates.get('speaky_club_5')
         await context.bot.send_message(
             chat_id,
             text=text_4,
@@ -377,12 +343,7 @@ async def handle_speak_club_level_choice(update: Update, context: ContextTypes.D
 
 async def speak_club_lower(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    text = dedent("""
-        ✨ Мы получили уведомление о том, что ваш уровень ниже intermediate, \
-        но вы тоже хотели бы участвовать в разговорных клубах и напишем вам, как только такая возможность появится
-
-        А пока, хотели бы рассмотреть групповые занятия со стоимостью 500руб / занятие?
-    """)
+    text = MessageTemplates.get('speaky_club_choice_1')
     keyboard = [
         [InlineKeyboardButton('Да', callback_data='yes')],
         [InlineKeyboardButton('Нет', callback_data='No')]
@@ -406,12 +367,7 @@ async def handle_lower_level_choice(update: Update, context: ContextTypes.DEFAUL
     if update.callback_query.data == 'yes':
         return await group_club_start(update, context)
     chat_id = update.effective_chat.id
-    text = dedent("""
-        ✨ Спасибо, что обратились к нашему помощнику
-
-        Мы свяжемся с вами, как только у нас появится актуальное для вас предложение 
-        До скорого 😉
-    """)
+    text = MessageTemplates.get('speaky_club_choice_2')
     await context.bot.send_message(
         chat_id=chat_id,
         text=text,
@@ -426,81 +382,65 @@ async def handle_lower_level_choice(update: Update, context: ContextTypes.DEFAUL
 
 async def level_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    text = dedent("""
-        Мы поможем определить твой уровень 😉
-
-        Прямо здесь, в боте, пришли голосовое сообщение длиной 2-4 минуты с ответом на вопросы:
-
-        🔸 Tell shortly about your last trip wherever you went to: who did you go with? \
-                  where to? what did you do there? how did you like it? would you like to go there again?
-
-        🔸 What do you tend to do when you have some free time? How long have you been doing that? 
-
-        ❗Важно: не готовьтесь к ответом на вопросы. \
-                  Чтобы подобрать группу, в которой вам и вашим peers буду комфортно, \
-                  нам важно оценить именно вашу спонтанную речь
-    """)
+    text = MessageTemplates.get('level_choice_1')
+    keyboard = [
+        [InlineKeyboardButton('Да', callback_data='yes')],
+        [InlineKeyboardButton('Нет', callback_data='no')]
+    ]
     await context.bot.send_message(
         chat_id=chat_id,
         text=text,
         parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(keyboard),
     )
     await context.bot.delete_message(
         chat_id=chat_id,
         message_id=update.effective_message.message_id
     )
-    return 'AWAIT_VOICE'
+    return 'AWAIT_LEVEL_TEST_CONFIRMATION'
 
 
-async def handle_voice_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # TODO Сделать обработку voice_test
-    return
+async def handle_level_test_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.callback_query:
+        return 'AWAIT_LEVEL_TEST_CONFIRMATION'
+    chat_id = update.effective_chat.id
+    if update.callback_query.data == 'no':
+        text = MessageTemplates.get('level_test_confirmation_no')
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            parse_mode='HTML',
+        )
+        await context.bot.delete_message(
+            chat_id=chat_id,
+            message_id=update.effective_message.message_id
+        )
+        return 'START'
+    elif update.callback_query.data == 'yes':
+        text = MessageTemplates.get('level_test_confirmation_yes')
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            parse_mode='HTML',
+        )
+        await context.bot.delete_message(
+            chat_id=chat_id,
+            message_id=update.effective_message.message_id
+        )
+        username = update.effective_chat.username
+        async for user in User.objects.filter(is_superuser=True):
+            await context.bot.send_message(
+                chat_id=user.chat_id,
+                text=F'Пользователь {username} хотел бы пройти тест своего языкового уровня'
+            )
+        return 'START'
 
 
 async def group_club_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    text_1 = dedent("""
-        ⭐ <b>Групповые занятия</b> помогут:
-
-        💡набрать базу знаний
-        💡разложить по полочкам то, что ты уже знаешь
-        💡выучить достаточно, чтобы свободно выражать мысли
-        💡преодолеть языковой барьер, общаясь с peers в группе
-
-        <b>Формат и цена:</b>
-        занятия в Zoom по 60мин 2 раза в неделю
-        домашние задания
-        стоимость занятия 500руб, оплата за месяц
-        до 6 человек
-    """)
-    text_2 = dedent("""
-        <b>Как проходят:</b>
-
-        курс English File от Oxford как основа
-        доп. материалы - YouTube виде и не только
-        интерактивные задания
-        вывод в речь всего нового
-        много speaking в парах
-        регулярные revisions
-    """)
-    text_3 = dedent("""
-        <b>Расписание:</b>
-
-        🔘 Pre-Intermediate
-
-        🔘 Intermediate
-
-        ❗Если у вас другой уровень, укажите его в анкете по ссылке ниже, мы свяжемся с вами и сообщим, она каком этапе набор в группу вашего уровня
-
-        🤩 <b>РАЗГОВОРНЫЙ КЛУБ</b> 🤩
-                            с @dasha.speaky
-
-        🍁 <b>Примерные темы сентября:</b>
-        Board games - needed vocabulary
-        How fake news spread
-        Are emojis making us dumber?
-        How to buy happiness
-    """)
+    text_1 = MessageTemplates.get('group_lessons_1')
+    text_2 = MessageTemplates.get('group_lessons_2')
+    text_3 = MessageTemplates.get('group_lessons_3')
     keyboard = [
         [InlineKeyboardButton('Анкета', url='http://example.com')]
     ]
@@ -516,8 +456,8 @@ async def group_club_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='HTML',
     )
     await sleep(3)
-    if 'group_club' in [subscription.product.name for subscription in context.user_data['subscriptions'].values()]:
-        text_4 = 'Поздравляем! У вас уже есть активная подписка на групповые занятия. Ждем на следующем уроке'
+    if 'group_lessons' in [subscription.product.id_name for subscription in context.user_data['subscriptions'].values()]:
+        text_4 = MessageTemplates.get('group_lessons_4')
         await context.bot.send_message(
             chat_id,
             text=text_4,
@@ -535,19 +475,7 @@ async def group_club_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def personal_lessons_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    text = dedent("""
-        ⭐<b>Индивидуальные занятия</b> помогут:
-
-        💡заниматься с максимальным прогрессом
-        💡быстро закрыть узкий запрос: подготовиться к собеседованию / экзамену / переезду и тп
-        💡заниматься по программе, подобранной для ваших личных нужд и интересов
-
-        <b>Формат и цена:</b>
-        занятия в Zoom 60мин с преподавателем из команды 
-        ваш индивидуальный график
-        объем домашних заданий и программа зависит отт ваших задач
-        стоимость от 1500руб/занятие, оплата за месяц
-    """)
+    text = MessageTemplates.get('personal_lessons_1')
     keyboard = [
         [InlineKeyboardButton('Анкета', url='http://example.com')]
     ]
@@ -576,8 +504,8 @@ async def personal_lessons_start(update: Update, context: ContextTypes.DEFAULT_T
     if message:
         context.chat_data.update({"current_teacher_list_position": 0})
         context.chat_data.update({"message_id": message.id})
-    if 'personal_lessons' in [subscription.product.name for subscription in context.user_data['subscriptions'].values()]:
-        text_4 = 'Поздравляем! У вас уже есть активная подписка на индивидуальные занятия'
+    if 'personal_lessons' in [subscription.product.id_name for subscription in context.user_data['subscriptions'].values()]:
+        text_4 = MessageTemplates.get('personal_lessons_2')
         await context.bot.send_message(
             chat_id,
             text=text_4,
@@ -797,7 +725,7 @@ async def user_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         'WELCOME_CHOICE': handle_welcome_choice,
         'SPEAK_CLUB_LEVEL_CHOICE': handle_speak_club_level_choice,
         'LOWER_LEVEL_CHOICE': handle_lower_level_choice,
-        'AWAIT_VOICE': handle_voice_test,
+        'AWAIT_LEVEL_TEST_CONFIRMATION': handle_level_test_confirmation,
         'TEACHER_PAGINATION': teacher_pagination,
         'AWAIT_ADMIN_CHOICE': handle_admin_choice,
         'AWAIT_ADMIN_GROUP_CHOICE': handle_admin_group_choice,

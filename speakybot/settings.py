@@ -46,7 +46,8 @@ TELEGRAM_API_URL = f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/'
 # YOO_TOKEN = env('YOO_TOKEN', 'test_Ks28CdC0JlNMNJGi6yu3DQnYMyTasOQD001a9TMh3Wg')  # Дашин токен
 # YOO_SHOP_ID = env('SHOP_ID', '322466')  # Дашин шоп id
 
-YOO_TOKEN = env('YOO_TOKEN', 'test_MC3lMB_QVPrNgwbvtTAYXMnBvPzc0Nez5-mzvCCchIk')  # Мой токен
+YOO_TOKEN = env(
+    'YOO_TOKEN', 'test_MC3lMB_QVPrNgwbvtTAYXMnBvPzc0Nez5-mzvCCchIk')  # Мой токен
 YOO_SHOP_ID = env('SHOP_ID', '210134')  # Мой шоп id
 
 INSTALLED_APPS = [
@@ -56,9 +57,6 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-
-    # other
-    'tinymce',
 
     # speakybot
     'user',

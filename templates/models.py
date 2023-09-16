@@ -1,5 +1,4 @@
 from django.db import models
-from tinymce.models import HTMLField
 
 
 class Template(models.Model):
@@ -9,7 +8,7 @@ class Template(models.Model):
         null=False,
     )
 
-    content = HTMLField(
+    content = models.TextField(
         verbose_name="Текст шаблона",
         default='',
         blank=True,

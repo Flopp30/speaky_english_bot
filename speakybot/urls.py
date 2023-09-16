@@ -19,7 +19,5 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('tinymce/', include('tinymce.urls')),
-
     path('payments/', include('payment.urls'), name='payments')
 ]
