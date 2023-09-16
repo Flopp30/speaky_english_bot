@@ -50,7 +50,14 @@ class User(models.Model):
     )
 
     def __str__(self) -> str:
-        return f"Пользователь {self.username if self.username else 'Noname'}"
+        return f"{self.username if self.username else self.chat_id}"
+
+    @property
+    def link(self):
+        return (
+            f"https://web.telegram.org/#@{self.username}" if self.username else
+            f"https://web.telegram.org/#{self.chat_id}"
+        )
 
     class Meta:
         verbose_name = 'Пользователь'

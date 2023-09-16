@@ -3,9 +3,20 @@ from django.db import models
 from utils.models import NOT_NULLABLE, NULLABLE
 
 
+class ProductType(models.TextChoices):
+    SPEAKY_CLUB = 'speaky_club'
+    GROUP_LESSONS = 'group_lessons'
+    PERSONAL_LESSONS = 'personal_lessons'
+
+
 class Product(models.Model):
     id_name = models.CharField(
-        verbose_name='Название продукта для бота', max_length=50, **NOT_NULLABLE, unique=True)
+        verbose_name='Название продукта для бота',
+        max_length=50,
+        **NOT_NULLABLE,
+        unique=True,
+        choices=ProductType.choices
+    )
     name = models.CharField(
         verbose_name='Название продукта для отображения', max_length=128, **NOT_NULLABLE)
     price = models.FloatField(verbose_name='Цена', **NOT_NULLABLE, default=0)
@@ -13,6 +24,9 @@ class Product(models.Model):
         verbose_name='Валюта', max_length=128, **NOT_NULLABLE, default='RUB')
     description = models.TextField(
         verbose_name='Описание продукта', **NULLABLE)
+
+    def __str__(self):
+        return f"Продукт {self.name}"
 
     class Meta:
         verbose_name = 'Продукт'
@@ -40,6 +54,9 @@ class ExternalLink(models.Model):
         **NOT_NULLABLE,
         unique=False,
     )
+
+    def __str__(self):
+        return f"Ссылка {self.source}"
 
     class Meta:
         verbose_name = 'Ссылка'

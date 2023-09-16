@@ -1,0 +1,64 @@
+{% extends 'admin/base.html' %}
+{% load i18n static %}<!DOCTYPE html>
+{% get_current_language as LANGUAGE_CODE %}{% get_current_language_bidi as LANGUAGE_BIDI %}
+{% load static %}
+{% block extrahead %}
+    {{ block.super }}
+    <link rel="stylesheet" type="text/css" href="{% static 'admin.css' %}">
+    <script src="{% static 'admin.js' %}"></script>
+
+{% endblock %}
+{% block title %}Speaky Bot{% endblock %}
+{% block header %}
+    <div id="header">
+        <div id="branding">
+            {% block branding %}<b><i>Speaky Bot</i></b>{% endblock %}
+        </div>
+        {% block usertools %}
+            {% if has_permission %}
+                <div id="user-tools">
+                    {% block welcome-msg %}
+                        {% translate 'Welcome,' %}
+                        <strong>{% firstof user.get_short_name user.get_username %}</strong>.
+                    {% endblock %}
+                    {% block userlinks %}
+                        {% if user.is_active and user.is_staff %}
+                            {% url 'django-admindocs-docroot' as docsroot %}
+                            {% if docsroot %}
+                                <a href="{{ docsroot }}">{% translate 'Documentation' %}</a> /
+                            {% endif %}
+                        {% endif %}
+                        {% if user.has_usable_password %}
+                            <a href="{% url 'admin:password_change' %}">{% translate 'Change password' %}</a> /
+                        {% endif %}
+                        <form id="logout-form" method="post" action="{% url 'admin:logout' %}">
+                            {% csrf_token %}
+                            <button type="submit">{% translate 'Log out' %}</button>
+                        </form>
+                        {% include "admin/color_theme_toggle.html" %}
+                    {% endblock %}
+                </div>
+            {% endif %}
+        {% endblock %}
+        {% block nav-global %}{% endblock %}
+    </div>
+    <div id="modal-refund" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Подтверждение возврата <span class="close">&times;</span></h2>
+            </div>
+            <form id="refund-form" method="POST" action="{% url 'payments:refund_create' %}">
+                {% csrf_token %}
+                <input type="hidden" name="payment_id" value="">
+                <div class="modal-body">
+                    <p>Оформить возврат денежных средств?</p> <p>Подписка пользователя будет аннулирована, ДС будут списаны с вашего счета YooKassa.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="custom-button">Вернуть ДС</button>
+                    <button type="button" class="close custom-button">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+{% endblock %}
+

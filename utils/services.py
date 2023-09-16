@@ -2,8 +2,13 @@ import json
 import uuid
 
 from django.conf import settings
-from yookassa import Payment as Yoo_Payment, Configuration
+from yookassa import (
+    Payment as Yoo_Payment,
+    Configuration,
+    Refund as Yoo_Refund,
+)
 
+from payment.models import Payment
 from product.models import Product
 from subscription.models import Subscription
 
@@ -11,7 +16,7 @@ Configuration.account_id = settings.YOO_SHOP_ID
 Configuration.secret_key = settings.YOO_TOKEN
 
 
-def get_yoo_payment(payment_amount, payment_currency, product_name, sub_period, metadata: dict = {}):
+def create_yoo_payment(payment_amount, payment_currency, product_name, sub_period, metadata: dict = {}) -> dict:
     idempotence_key = str(uuid.uuid4())
     payment = Yoo_Payment.create({
         "save_payment_method": True,
@@ -35,7 +40,7 @@ def get_yoo_payment(payment_amount, payment_currency, product_name, sub_period, 
     return json.loads(payment.json())
 
 
-def get_auto_payment(sub: Subscription, product: Product, metadata: dict = {}):
+def create_yoo_auto_payment(sub: Subscription, product: Product, metadata: dict = {}) -> dict:
     idempotence_key = str(uuid.uuid4())
     payment = Yoo_Payment.create(
         {
@@ -50,3 +55,14 @@ def get_auto_payment(sub: Subscription, product: Product, metadata: dict = {}):
         }, idempotence_key
     )
     return json.loads(payment.json())
+
+
+def create_yoo_refund(payment: Payment) -> dict:
+    refund = Yoo_Refund.create({
+        "amount": {
+            "value": payment.amount,
+            "currency": payment.currency,
+        },
+        "payment_id": payment.payment_service_id,
+    })
+    return json.loads(refund.json())

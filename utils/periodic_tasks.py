@@ -4,7 +4,7 @@ from telegram.ext import CallbackContext
 
 from payment.models import Payment
 from subscription.models import Subscription
-from utils.services import get_auto_payment
+from utils.services import create_yoo_auto_payment
 
 
 async def renew_sub_hourly(context: CallbackContext):
@@ -18,7 +18,7 @@ async def renew_sub_hourly(context: CallbackContext):
                 "chat_id": sub.user.chat_id,
                 "renew": True,
             }
-            yoo_payment = get_auto_payment(sub=sub, product=sub.product, metadata=metadata)
+            yoo_payment = create_yoo_auto_payment(sub=sub, product=sub.product, metadata=metadata)
             await Payment.objects.acreate(
                 status=yoo_payment.get('status'),
                 payment_service_id=yoo_payment.get('id'),

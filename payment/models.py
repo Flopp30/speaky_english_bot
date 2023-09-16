@@ -1,7 +1,7 @@
 from django.db import models
 
 from user.models import User
-from utils.models import NOT_NULLABLE, NULLABLE
+from utils.models import NOT_NULLABLE
 
 
 class PaymentStatus(models.TextChoices):
@@ -39,9 +39,44 @@ class Payment(models.Model):
         on_delete=models.DO_NOTHING
     )
 
+    is_refunded = models.BooleanField(verbose_name='Возвращен?', default=False)
+
     def __str__(self):
         return f"{self.id}: {self.amount} from {self.user}"
 
     class Meta:
         verbose_name = 'Платеж'
         verbose_name_plural = 'Платежи'
+
+
+class RefundStatus(models.TextChoices):
+    CREATED = 'created'
+    SUCCEEDED = 'succeeded'
+
+
+class Refund(models.Model):
+    payment = models.OneToOneField(Payment, on_delete=models.CASCADE, verbose_name='Возврат', related_name='refund')
+    status = models.CharField(
+        choices=RefundStatus.choices,
+        verbose_name='Статус',
+        default=RefundStatus.CREATED,
+        max_length=128
+    )
+    payment_service_id = models.UUIDField(
+        verbose_name='Id возврата в платежной системе',
+        **NOT_NULLABLE,
+        unique=False
+    )
+    created_at = models.DateTimeField(verbose_name='Дата создания', auto_now_add=True)
+    updated_at = models.DateTimeField(verbose_name='Дата обновления', auto_now=True)
+
+    def __str__(self):
+        return f"Refund for payment {self.payment.id}"
+
+    @property
+    def link(self):
+        return "link"
+
+    class Meta:
+        verbose_name = 'Возврат'
+        verbose_name_plural = 'Возвраты'

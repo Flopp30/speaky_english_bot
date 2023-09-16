@@ -23,12 +23,12 @@ from django.utils import timezone
 from yookassa import Configuration
 
 from payment.models import Payment
-from product.models import Product
+from product.models import Product, ProductType
 from templates.models import Template
 from subscription.models import Subscription
 from user.models import User, Teacher
 from utils.models import MessageTemplates, MessageTeachers
-from utils.services import get_yoo_payment
+from utils.services import create_yoo_payment
 from utils.periodic_tasks import renew_sub_hourly
 
 logger = logging.getLogger('tbot')
@@ -110,8 +110,9 @@ async def staff_functions_select(update: Update, context: ContextTypes.DEFAULT_T
 
 async def welcome_letter(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    context.user_data['subscriptions'] = {subscription.id: subscription async for subscription in context.user_data['user'].subscriptions.filter(
-        is_active=True).select_related('product')}
+    context.user_data['subscriptions'] = {subscription.id: subscription async for subscription in
+                                          context.user_data['user'].subscriptions.filter(
+                                              is_active=True).select_related('product')}
     keyboard = [
         [InlineKeyboardButton("Разговорный клуб", callback_data='speak_club')],
         [InlineKeyboardButton("Групповые занятия",
@@ -280,7 +281,10 @@ async def speak_club_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='HTML',
     )
     await sleep(3)
-    if 'speaky_club' in [subscription.product.id_name for subscription in context.user_data['subscriptions'].values()]:
+    if ProductType.SPEAKY_CLUB in [
+        subscription.product.id_name for subscription in
+        context.user_data['subscriptions'].values()
+    ]:
         text_4 = MessageTemplates.get('speaky_club_5')
         await context.bot.send_message(
             chat_id,
@@ -304,7 +308,7 @@ async def handle_speak_club_level_choice(update: Update, context: ContextTypes.D
     if update.callback_query.data in ('upper', 'advanced'):
         user = context.user_data['user'] or await User.objects.aget(chat_id=chat_id)
         product = await Product.objects.aget(name="Разговорный клуб")
-        yoo_payment = get_yoo_payment(
+        yoo_payment = create_yoo_payment(
             payment_amount=product.price,
             payment_currency=product.currency,
             product_name=product.name,
@@ -456,7 +460,8 @@ async def group_club_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='HTML',
     )
     await sleep(3)
-    if 'group_lessons' in [subscription.product.id_name for subscription in context.user_data['subscriptions'].values()]:
+    if 'group_lessons' in [subscription.product.id_name for subscription in
+                           context.user_data['subscriptions'].values()]:
         text_4 = MessageTemplates.get('group_lessons_4')
         await context.bot.send_message(
             chat_id,
@@ -504,7 +509,8 @@ async def personal_lessons_start(update: Update, context: ContextTypes.DEFAULT_T
     if message:
         context.chat_data.update({"current_teacher_list_position": 0})
         context.chat_data.update({"message_id": message.id})
-    if 'personal_lessons' in [subscription.product.id_name for subscription in context.user_data['subscriptions'].values()]:
+    if 'personal_lessons' in [subscription.product.id_name for subscription in
+                              context.user_data['subscriptions'].values()]:
         text_4 = MessageTemplates.get('personal_lessons_2')
         await context.bot.send_message(
             chat_id,
@@ -589,9 +595,9 @@ async def handle_admin_choice(update: Update, context: ContextTypes.DEFAULT_TYPE
         Хотите отправить сообщения учащимся в группу?
     """)
         keyboard = [
-            [InlineKeyboardButton(f'{key}', callback_data=key)
-             for key in groups.keys()]
-        ] + [[InlineKeyboardButton('В главное меню', callback_data='start')]]
+                       [InlineKeyboardButton(f'{key}', callback_data=key)
+                        for key in groups.keys()]
+                   ] + [[InlineKeyboardButton('В главное меню', callback_data='start')]]
         await context.bot.send_message(
             chat_id=chat_id,
             text=text,
@@ -754,7 +760,6 @@ async def reload_from_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
-
     import tracemalloc
     tracemalloc.start()
     # telegram_handler = TelegramLogsHandler(settings.ADMIN_TG_BOT, settings.ADMIN_TG_CHAT)
