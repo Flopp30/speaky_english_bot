@@ -28,4 +28,5 @@ async def renew_sub_hourly(context: CallbackContext):
             )
         else:
             sub.is_active = False
+            await sub.asave()
             await context.bot.send_message(sub.user.chat_id, text=f"Ваша подписка на '{sub.product.name}' закончилась.")
