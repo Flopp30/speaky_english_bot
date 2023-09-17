@@ -587,7 +587,7 @@ async def handle_admin_choice(update: Update, context: ContextTypes.DEFAULT_TYPE
             groups[subscription.product.name] = groups.get(
                 subscription.product.name, []) + [subscription.user.username]
         groups_texts = '\n'.join(
-            [f'<b>{key}<b/>: {", ".join(value)}' for key, value in groups.items()])
+            [f'<b>{key}</b>: {", ".join(value)}' for key, value in groups.items()])
         text = dedent(f"""
         В настоящее время активно {len(subscriptions)} подписок.
         Следующие группы:

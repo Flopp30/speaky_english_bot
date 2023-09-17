@@ -1,8 +1,3 @@
-import logging
-
-from django.db.models.signals import post_save
-from django.dispatch import receiver
-
 from templates.models import Template
 from user.models import Teacher
 
@@ -31,11 +26,6 @@ class MessageTemplates:
             )
 
 
-@receiver(post_save, sender=Template)
-def reloadModels(sender, **kwargs):
-    MessageTemplates.load_templates()
-
-
 class MessageTeachers:
     teachers: list[dict[str, str]] = []
 
@@ -59,8 +49,3 @@ class MessageTeachers:
                     "caption": caption
                 }
             )
-
-
-@receiver(post_save, sender=Teacher)
-def reloadModels(sender, **kwargs):
-    MessageTeachers.load_teachers()

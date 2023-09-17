@@ -55,7 +55,6 @@ class User(models.Model):
     @property
     def link(self):
         return (
-            f"https://web.telegram.org/#@{self.username}" if self.username else
             f"https://web.telegram.org/#{self.chat_id}"
         )
 
