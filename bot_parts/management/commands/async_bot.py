@@ -226,13 +226,16 @@ async def handle_subscription_action(update: Update, context: ContextTypes.DEFAU
         action, sub_id = update.callback_query.data.split('-')
     except ValueError:
         return 'AWAIT_SUBSCRIPTION_ACTION'
-    subscription = context.user_data['subscriptions'].get(int(sub_id))
+    subscription: Subscription = context.user_data['subscriptions'].get(
+        int(sub_id))
     if not subscription:
         return 'AWAIT_SUBSCRIPTION_ACTION'
     if action == 'turn_on':
-        subscription.is_auto_renew = True
-        await subscription.asave()
-        text = f'Автопродление подписки на {subscription.product.name} включено'
+        if subscription.verified_payment_id:
+            subscription.is_auto_renew = True
+            await subscription.asave()
+            text = f'Автопродление подписки на {subscription.product.name} включено'
+        # TODO Обработать случай, когда нет сохраненного айдишника для постоянного платежа
     elif action == 'turn_off':
         subscription.is_auto_renew = False
         await subscription.asave()
@@ -301,44 +304,48 @@ async def speak_club_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return 'SPEAK_CLUB_LEVEL_CHOICE'
 
 
+async def create_db_payment(product: Product, user: User, additional_data: dict = {}):
+    yoo_payment = create_yoo_payment(
+        payment_amount=product.price,
+        payment_currency=product.currency,
+        product_name=product.name,
+        sub_period='1 месяц',
+        metadata={
+            'product_id': product.id,
+            "user_id": user.id,
+        } | additional_data
+    )
+    url = yoo_payment.get("confirmation", dict()).get(
+        "confirmation_url", None)
+    await Payment.objects.acreate(
+        status=yoo_payment.get('status'),
+        payment_service_id=yoo_payment.get('id'),
+        amount=yoo_payment.get('amount').get('value'),
+        currency=yoo_payment.get('amount').get('currency'),
+        user=user
+    )
+    return url
+
+
 async def handle_speak_club_level_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if not update.callback_query:
         return 'SPEAK_CLUB_LEVEL_CHOICE'
     if update.callback_query.data in ('upper', 'advanced'):
         user = context.user_data['user'] or await User.objects.aget(chat_id=chat_id)
-        product = await Product.objects.aget(name="Разговорный клуб")
-        yoo_payment = create_yoo_payment(
-            payment_amount=product.price,
-            payment_currency=product.currency,
-            product_name=product.name,
-            sub_period='1 месяц',
-            metadata={
-                'product_id': product.id,
-                "user_id": user.id,
-                "english_lvl": update.callback_query.data,
-                "chat_id": chat_id,
-            }
-        )
-        url = yoo_payment.get("confirmation", dict()).get(
-            "confirmation_url", None)
+        product = await Product.objects.aget(id_name="speaky_club")
+        url = create_db_payment(
+            product, user, {"english_lvl": update.callback_query.data, "chat_id": chat_id})
         keyboard = [
             [InlineKeyboardButton(
                 f'Оплатить {product.price} {product.currency}', web_app=WebAppInfo(url=url))],
         ]
-        await Payment.objects.acreate(
-            status=yoo_payment.get('status'),
-            payment_service_id=yoo_payment.get('id'),
-            amount=yoo_payment.get('amount').get('value'),
-            currency=yoo_payment.get('amount').get('currency'),
-            user=user
-        )
         await context.bot.send_message(
             chat_id,
             text="Ссылка на оплату месячной подписки:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-        return "START"  # TODO действие после отправки ссылки
+        return "START"
     elif update.callback_query.data == 'lower':
         return await speak_club_lower(update, context)
     else:
@@ -595,9 +602,9 @@ async def handle_admin_choice(update: Update, context: ContextTypes.DEFAULT_TYPE
         Хотите отправить сообщения учащимся в группу?
     """)
         keyboard = [
-                       [InlineKeyboardButton(f'{key}', callback_data=key)
-                        for key in groups.keys()]
-                   ] + [[InlineKeyboardButton('В главное меню', callback_data='start')]]
+            [InlineKeyboardButton(f'{key}', callback_data=key)
+             for key in groups.keys()]
+        ] + [[InlineKeyboardButton('В главное меню', callback_data='start')]]
         await context.bot.send_message(
             chat_id=chat_id,
             text=text,
@@ -754,9 +761,9 @@ async def reload_from_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     if key == settings.INTERNAL_MESSAGE_KEY:
         if command == '!reload_teachers':
-            await MessageTeachers.load_teachers(context)
+            await MessageTeachers.load_teachers()
         elif command == '!reload_templates':
-            await MessageTemplates.load_templates(context)
+            await MessageTemplates.load_templates()
 
 
 def main():
@@ -773,8 +780,10 @@ def main():
     job_queue = application.job_queue
     job_queue.run_repeating(
         renew_sub_hourly, interval=timedelta(hours=1), first=5)
-    job_queue.run_repeating(MessageTemplates.load_templates, interval=timedelta(minutes=10), first=1)
-    job_queue.run_repeating(MessageTeachers.load_teachers, interval=timedelta(minutes=10), first=1)
+    job_queue.run_repeating(MessageTemplates.load_templates,
+                            interval=timedelta(minutes=10), first=1)
+    job_queue.run_repeating(MessageTeachers.load_teachers,
+                            interval=timedelta(minutes=10), first=1)
 
     application.add_handler(PrefixHandler(
         '!', ['reload_templates', 'reload_teachers'], reload_from_db))

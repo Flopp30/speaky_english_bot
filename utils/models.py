@@ -30,7 +30,7 @@ class MessageTeachers:
     teachers: list[dict[str, str]] = []
 
     @classmethod
-    async def load_teachers(cls, context):
+    async def load_teachers(cls, *args, **kwargs):
         cls.teachers = []
         async for teacher in Teacher.objects.filter(is_active=True):
             photo_path = teacher.photo.path

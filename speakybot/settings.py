@@ -109,7 +109,7 @@ WSGI_APPLICATION = 'speakybot.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': env('DB_PATH', (BASE_DIR / 'db.sqlite3')),
     }
 }
 
@@ -153,6 +153,7 @@ STATIC_DIR = os.path.join(BASE_DIR, 'static')
 STATICFILES_DIRS = [
     STATIC_DIR,
 ]
+STATIC_ROOT = './assets/'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = env('MEDIA_ROOT', './media/')
