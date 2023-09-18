@@ -52,8 +52,6 @@ TG_BOT_URL = env('BOT_UTL', 'https://google.com/')
 TELEGRAM_API_URL = f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/'
 TG_SEND_MESSAGE_URL = settings.TELEGRAM_API_URL + 'sendMessage'
 
-INTERNAL_MESSAGE_KEY = env('INTERNAL_MESSAGE_KEY')
-
 # YOOKASSA definition
 # YOO_TOKEN = env('YOO_TOKEN', 'test_Ks28CdC0JlNMNJGi6yu3DQnYMyTasOQD001a9TMh3Wg')  # Дашин токен
 # YOO_SHOP_ID = env('SHOP_ID', '322466')  # Дашин шоп id
