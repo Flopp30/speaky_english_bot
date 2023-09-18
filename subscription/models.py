@@ -15,7 +15,7 @@ class SubPeriodTypes(models.TextChoices):
 
 class Subscription(models.Model):
     is_auto_renew = models.BooleanField(
-        verbose_name='Автоматически продлевать?', default=False)
+        verbose_name='Автоматически продлевать?', default=True)
     sub_start_date = models.DateTimeField(
         verbose_name='Дата начала подписки', **NULLABLE)
     unsub_date = models.DateTimeField(
@@ -44,11 +44,6 @@ class Subscription(models.Model):
         default=True,
         verbose_name='Активна?'
     )
-
-    # @property
-    # def is_active(self):
-    #     now = datetime.now()
-    #     return self.sub_start_date <= now <= self.unsub_date
 
     class Meta:
         verbose_name = 'Подписка'

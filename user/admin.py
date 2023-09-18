@@ -8,9 +8,10 @@ from .models import User, Teacher
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
     list_display = (
-        'id', 'chat_id', 'username_', 'last_visit_time', 'registration_datetime', 'first_sub_date', 'is_active'
+        'id', 'chat_id', 'username_', 'send_message_', 'last_visit_time', 'registration_datetime', 'first_sub_date',
+        'is_active', 'state'
     )
-    list_filter = ('last_visit_time', 'registration_datetime', 'first_sub_date', 'is_active',)
+    list_filter = ('last_visit_time', 'registration_datetime', 'first_sub_date', 'is_active', 'state')
     ordering = ('-id', 'last_visit_time')
     list_per_page = 20
     search_fields = ('username',)
@@ -21,8 +22,13 @@ class UserAdmin(admin.ModelAdmin):
             obj.link,
             obj,
         )
-
     username_.short_description = 'Имя пользователя'
+
+    def send_message_(self, obj):
+        return format_html(
+            f'<button userId={obj.pk} type="button" class="custom-button send-msg-btn">Сообщение</button>'
+        )
+    send_message_.short_description = 'Отправить сообщение'
 
 
 @admin.register(Teacher)

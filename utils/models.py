@@ -15,7 +15,7 @@ class MessageTemplates:
         return cls.templates.get(key, cls.default_message.format(key=key))
 
     @classmethod
-    async def load_templates(cls, context):
+    async def load_templates(cls, *args, **kwargs):
         cls.templates = {}
         async for template in Template.objects.all():
             cls.templates[template.name] = (

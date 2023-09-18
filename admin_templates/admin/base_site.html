@@ -51,10 +51,46 @@
                 {% csrf_token %}
                 <input type="hidden" name="payment_id" value="">
                 <div class="modal-body">
-                    <p>Оформить возврат денежных средств?</p> <p>Подписка пользователя будет аннулирована, ДС будут списаны с вашего счета YooKassa.</p>
+                    <p>Оформить возврат денежных средств?</p>
+                    <p>Подписка пользователя будет аннулирована, ДС будут списаны с вашего счета YooKassa.</p>
                 </div>
                 <div class="modal-footer">
                     <button type="submit" class="custom-button">Вернуть ДС</button>
+                    <button type="button" class="close custom-button">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="modal-send-message" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Отправить сообщение <span class="close">&times;</span></h2>
+            </div>
+            <form id="send-message-form" method="POST" action="{% url 'users:send_message' %}">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label for="id_with_link">С ссылкой на оплату?</label>
+                    <select name="with_link" id="id_with_link">
+                        <option value="False" selected>Без ссылки</option>
+                        <option value="True">C ссылкой</option>
+                    </select>
+                </div>
+                <div id="hidden-area-id" class="form-group d-none">
+                    <label for="product_id">Продукт, к которому нужна ссылка</label>
+                    <select name="product_id" id="product_id">
+                        {% for product in products %}
+                            <option value="{{ product.id }}">{{ product.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="message_text_id">Текст сообщения</label>
+                    <textarea class="text-input-lg" name="message_text" id="message_text_id" placeholder="..."></textarea>
+                </div>
+            <input type="hidden" name="user_id" value="">
+                <div class="modal-footer">
+                    <button type="submit" class="custom-button">Отправить</button>
                     <button type="button" class="close custom-button">Отмена</button>
                 </div>
             </form>

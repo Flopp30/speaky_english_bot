@@ -56,7 +56,7 @@ class ExternalLink(models.Model):
     )
 
     def __str__(self):
-        return f"Ссылка {self.source}"
+        return f"{self.source}"
 
     class Meta:
         verbose_name = 'Ссылка'
