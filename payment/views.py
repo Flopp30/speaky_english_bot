@@ -10,14 +10,12 @@ from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from yookassa.domain.exceptions import BadRequestError
 
-from payment.models import Payment, PaymentStatus, Refund, RefundStatus
+from payment.models import Payment, PaymentStatus, Refund
 from product.models import LinkSources, ExternalLink, ProductType, Product
 from speakybot import settings
 from subscription.models import Subscription
 from utils.helpers import get_tg_payload
 from utils.services import create_yoo_refund
-
-TG_SEND_MESSAGE_URL = settings.TELEGRAM_API_URL + 'sendMessage'
 
 
 class YooPaymentCallBackView(View):
@@ -70,32 +68,35 @@ class YooPaymentCallBackView(View):
         else:
             subscription.unsub_date = subscription.unsub_date + relativedelta(months=1)
 
+        unsub_date_formatted = subscription.unsub_date.strftime("%d-%m-%Y")
+        text = "Платеж совершен успешно.\n"
         match product.id_name:
             case ProductType.SPEAKY_CLUB:
-                unsub_date_formatted = subscription.unsub_date.strftime("%d-%m-%Y")
                 english_lvl = metadata.get('english_lvl')
                 group_name = LinkSources.SPEAK_CLUB_UPPER if english_lvl == 'upper' else LinkSources.SPEAK_CLUB_ADV
-                link = ExternalLink.objects.filter(source=group_name).first().link
+                link = ExternalLink.objects.filter(source=group_name).first()
 
                 if is_create and link:
-                    text = ("Платеж совершен успешно.\n"
-                            f"Подписка в '{group_name}' оформлена до {unsub_date_formatted}")
+                    text += f"Подписка в '{group_name}' оформлена до {unsub_date_formatted}"
                     payload = get_tg_payload(chat_id=payment.user.chat_id, message_text=text, buttons=[
                         {
-                            'Чат клуба': link
+                            'Чат клуба': link.link
                         }
                     ])
                 else:
-                    text = (f"Платеж совершен успешно.\n"
-                            f"Подписка в '{group_name}' продлена до {unsub_date_formatted}")
+                    text += f"Подписка в '{group_name}' продлена до {unsub_date_formatted}"
                     payload = get_tg_payload(chat_id=payment.user.chat_id, message_text=text)
 
-            case ProductType.PERSONAL_LESSONS:
-                # TODO Успешный ответ при оплате персональных уроков
-                pass
-            case ProductType.GROUP_LESSONS:
-                # TODO Успешный ответ при оплате групп
-                pass
+            case _:
+                if product.id_name == ProductType.PERSONAL_LESSONS:
+                    group_name = LinkSources.PRIVATE_LESSONS
+                else:
+                    group_name = LinkSources.GROUP_LESSONS
+                if is_create:
+                    text += f"Подписка в '{group_name}' оформлена до {unsub_date_formatted}"
+                else:
+                    text += f"Подписка в '{group_name}' продлена до {unsub_date_formatted}"
+                payload = get_tg_payload(chat_id=payment.user.chat_id, message_text=text)
 
         subscription.save()
         payment.save()
@@ -122,10 +123,10 @@ class YooPaymentCallBackView(View):
         is_subscription_remain = refund.success()
 
         if is_subscription_remain:
-            text += (f"Подписка на '{subscription.product.name}' закончится:\n ."
+            text += (f"Подписка на '{subscription.product.name}' закончится:\n"
                      f"{subscription.unsub_date.strftime('%d-%m-%Y')}")
         else:
-            text += f"Подписка на '{subscription.product.name}' завершена.\n ."
+            text += f"Подписка на '{subscription.product.name}' завершена."
 
         payload = get_tg_payload(chat_id=refund.payment.user.chat_id, message_text=text)
         self.send_tg_message(payload)
@@ -133,14 +134,13 @@ class YooPaymentCallBackView(View):
 
     @staticmethod
     def send_tg_message(payload):
-        response = requests.post(TG_SEND_MESSAGE_URL, json=payload)
+        response = requests.post(settings.TG_SEND_MESSAGE_URL, json=payload)
         if response.status_code != 200:
             # TODO обработать неотправленное уведомление пользователю с ссылкой на оплату
             pass
 
 
 class RefundCreateView(View):
-    model = Refund
     return_url = '/admin/payment/payment/'
     error_message = 'Что-то пошло не так. Попробуйте перезагрузить страницу и повторите попытку'
     refund_already_exist_message = 'Возврат уже был создан ранее. Обратитесь в YooKassa за уточнением'

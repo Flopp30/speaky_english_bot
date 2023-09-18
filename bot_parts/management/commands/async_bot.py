@@ -674,7 +674,7 @@ async def send_message_for_group(update: Update, context: ContextTypes.DEFAULT_T
         )
         return 'AWAIT_MESSAGE_FOR_GROUP'
     if update.callback_query.data != 'confirm':
-        return await 'AWAIT_GROUP_MESSAGE_CONFIRMATION'
+        return 'AWAIT_GROUP_MESSAGE_CONFIRMATION'
     group_subscriptions = Subscription.objects.select_related(
         'product', 'user').filter(product__name=group_name)
     message_to_send = context.chat_data['message_to_send']

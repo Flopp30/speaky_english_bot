@@ -11,6 +11,8 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 import os
 from pathlib import Path
+
+from django.conf import settings
 from environs import Env
 
 env = Env()
@@ -44,6 +46,8 @@ LOG_LEVEL = env.int('LOG_LEVEL', 10)
 
 TG_BOT_URL = env('BOT_UTL', 'https://google.com/')
 TELEGRAM_API_URL = f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/'
+TG_SEND_MESSAGE_URL = settings.TELEGRAM_API_URL + 'sendMessage'
+
 INTERNAL_MESSAGE_KEY = env('INTERNAL_MESSAGE_KEY')
 
 # YOOKASSA definition
@@ -96,6 +100,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'utils.context_processors.products',
             ],
         },
     },
