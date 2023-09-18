@@ -6,13 +6,12 @@ from dateutil.relativedelta import relativedelta
 from django.contrib import messages
 from django.http import JsonResponse
 from django.shortcuts import redirect
-from django.urls import reverse
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from yookassa.domain.exceptions import BadRequestError
 
 from payment.models import Payment, PaymentStatus, Refund, RefundStatus
-from product.models import LinkSources, ExternalLink
+from product.models import LinkSources, ExternalLink, ProductType, Product
 from speakybot import settings
 from subscription.models import Subscription
 from utils.helpers import get_tg_payload
@@ -22,107 +21,122 @@ TG_SEND_MESSAGE_URL = settings.TELEGRAM_API_URL + 'sendMessage'
 
 
 class YooPaymentCallBackView(View):
-
     @csrf_exempt
     def dispatch(self, *args, **kwargs):
         return super().dispatch(*args, **kwargs)
 
     def post(self, request, *args, **kwargs):
-        response_data = json.loads(request.body.decode("utf-8"))
-        print(response_data)
-        response_obj, event = response_data.get('object'), response_data.get('event')
-        metadata = response_obj.get('metadata')
-        if event in ("payment.succeeded", "payment.canceled"):
-            user_id, chat_id, is_renew = metadata.get('user_id'), metadata.get('chat_id'), metadata.get('renew') == 'true'
-            try:
-                payment = Payment.objects.get(
-                    payment_service='YooKassa',
-                    payment_service_id=response_obj.get('id')
-                )
-            except Payment.DoesNotExist:
-                # TODO обработать ошибку платежа?
-                return JsonResponse({"status": "success"})
+        request_data = json.loads(request.body.decode("utf-8"))
+        returned_obj, event = request_data.get('object'), request_data.get('event')
+        match event:
+            case "refund.succeeded":
+                self.process_refund(returned_obj)
 
-            if is_renew:
-                sub_id = metadata.get('sub_id')
-                payload = self._renew(event, payment, sub_id, chat_id)
-            else:
-                product_id = metadata.get('product_id')
-                english_lvl = metadata.get('english_lvl')
-                payload = self._first_sub(event, payment, response_obj, user_id, product_id, english_lvl, chat_id)
+            case "payment.succeeded" | "payment.canceled":
+                try:
+                    payment = (
+                        Payment.objects
+                        .select_related('user', 'subscription')
+                        .get(
+                            payment_service='YooKassa',
+                            payment_service_id=returned_obj.get('id')
+                        )
+                    )
+                except (Payment.DoesNotExist):
+                    # TODO обработать ошибку платежа?
+                    return JsonResponse({"status": "success"})
 
-            response = requests.post(TG_SEND_MESSAGE_URL, json=payload)
-            if response.status_code != 200:
-                # TODO обработать неотправленное уведомление пользователю с ссылкой на оплату
-                pass
+                if event == "payment.succeeded":
+                    self.process_payment_success(
+                        payment=payment,
+                        returned_obj=returned_obj,
+                    )
+                else:
+                    self.process_payment_canceled(payment)
 
-            payment.save()
-        else:  # refund.succeeded
-            refund = Refund.objects.get(payment_service_id=response_obj.get('id'))
-            refund.status = RefundStatus.SUCCEEDED
-            refund.payment.save()
-            refund.save()
         return JsonResponse({"status": "success"})
 
-    @staticmethod
-    def _first_sub(event, payment, yoo_payment, user_id, product_id, english_lvl, chat_id):
-        payload = None
-        match event:
-            case "payment.succeeded":
-                payment.status = PaymentStatus.SUCCEEDED
-                now = datetime.datetime.now()
-                one_month_later = now + relativedelta(months=1)
-                verified_payment_id = yoo_payment.get('payment_method', {}).get('id', None)
-                Subscription.objects.create(
-                    is_auto_renew=True,
-                    sub_start_date=now,
-                    unsub_date=one_month_later,
-                    verified_payment_id=verified_payment_id,
-                    user_id=user_id,
-                    product_id=product_id,
-                )
-                text_base = "Платеж совершен успешно. Подписка на месяц оформлена. \nГруппа: {group_name}"
-                match english_lvl:
-                    case "upper":
-                        english_lvl = LinkSources.SPEAK_CLUB_UPPER
-                        text = text_base.format(group_name="Разговорный клуб High Inter / Upper")
-                    case _:
-                        english_lvl = LinkSources.SPEAK_CLUB_ADV
-                        text = text_base.format(group_name='Разговорный клуб Advanced')
-                try:
-                    link = ExternalLink.objects.get(source=english_lvl).link
-                    payload = get_tg_payload(chat_id=chat_id, message_text=text, buttons=[
+    def process_payment_success(self, payment, returned_obj):
+        payment.status = PaymentStatus.SUCCEEDED
+        metadata = returned_obj.get('metadata')
+        product = Product.objects.get(pk=metadata.get('product_id'))
+        subscription, is_create = Subscription.objects.get_or_create(is_active=True, user=payment.user, product=product)
+
+        if is_create:
+            subscription.sub_start_date = datetime.datetime.now()
+            subscription.unsub_date = datetime.datetime.now() + relativedelta(months=1)
+            subscription.verified_payment_id = returned_obj.get('payment_method', {}).get('id', None)
+            payment.subscription = subscription
+        else:
+            subscription.unsub_date = subscription.unsub_date + relativedelta(months=1)
+
+        match product.id_name:
+            case ProductType.SPEAKY_CLUB:
+                unsub_date_formatted = subscription.unsub_date.strftime("%d-%m-%Y")
+                english_lvl = metadata.get('english_lvl')
+                group_name = LinkSources.SPEAK_CLUB_UPPER if english_lvl == 'upper' else LinkSources.SPEAK_CLUB_ADV
+                link = ExternalLink.objects.filter(source=group_name).first().link
+
+                if is_create and link:
+                    text = ("Платеж совершен успешно.\n"
+                            f"Подписка в '{group_name}' оформлена до {unsub_date_formatted}")
+                    payload = get_tg_payload(chat_id=payment.user.chat_id, message_text=text, buttons=[
                         {
                             'Чат клуба': link
                         }
                     ])
-                except ExternalLink.DoesNotExist:
-                    payload = get_tg_payload(chat_id=chat_id, message_text=text)
-            case "payment.canceled":
-                payment.status = PaymentStatus.CANCELED
-                text = "Платеж перешел в статус отменен. Пожалуйста, повторите попытку оплаты."
-                payload = get_tg_payload(chat_id=chat_id, message_text=text)
+                else:
+                    text = (f"Платеж совершен успешно.\n"
+                            f"Подписка в '{group_name}' продлена до {unsub_date_formatted}")
+                    payload = get_tg_payload(chat_id=payment.user.chat_id, message_text=text)
 
-        return payload
+            case ProductType.PERSONAL_LESSONS:
+                # TODO Успешный ответ при оплате персональных уроков
+                pass
+            case ProductType.GROUP_LESSONS:
+                # TODO Успешный ответ при оплате групп
+                pass
+
+        subscription.save()
+        payment.save()
+        self.send_tg_message(payload)
+
+    def process_payment_canceled(self, payment):
+        payment.status = PaymentStatus.CANCELED
+        text = "Платеж перешел в статус отменен. Пожалуйста, повторите попытку оплаты."
+        payload = get_tg_payload(chat_id=payment.user.chat_id, message_text=text)
+        payment.save()
+        self.send_tg_message(payload)
+
+    def process_refund(self, returned_obj):
+        refund_id = returned_obj.get('id')
+        payment_service_id = returned_obj.get('payment_id')
+        refund = (
+            Refund.objects
+            .select_related('payment', 'payment__subscription', 'payment__subscription__product', 'payment__user')
+            .get(payment_service_id=refund_id, payment__payment_service_id=payment_service_id)
+        )
+        subscription = refund.payment.subscription
+        text = f"Возврат суммы {refund.payment.amount} {refund.payment.currency} проведен успешно.\n"
+
+        is_subscription_remain = refund.success()
+
+        if is_subscription_remain:
+            text += (f"Подписка на '{subscription.product.name}' закончится:\n ."
+                     f"{subscription.unsub_date.strftime('%d-%m-%Y')}")
+        else:
+            text += f"Подписка на '{subscription.product.name}' завершена.\n ."
+
+        payload = get_tg_payload(chat_id=refund.payment.user.chat_id, message_text=text)
+        self.send_tg_message(payload)
+        # TODO отправить Даше сообщение о успешно проведенном возврате?
 
     @staticmethod
-    def _renew(event, payment: Payment, sub_id, chat_id):
-        subscription = Subscription.objects.select_related('product').get(id=sub_id)
-        match event:
-            case "payment.succeeded":
-                payment.status = PaymentStatus.SUCCEEDED
-                one_month_later = datetime.datetime.now() + relativedelta(months=1)
-                subscription.unsub_date = one_month_later
-                text = (f"Подписка на '{subscription.product.name}' успешно продлена.\n"
-                        f"Следующее списание: {one_month_later.strftime('%d.%m.%Y')}")
-            case "payment.canceled" | _:
-                payment.status = PaymentStatus.CANCELED
-                subscription.is_active = False
-                text = f"Недостаточно средств на счете для продления подписки '{subscription.product.name}'"
-
-        payload = get_tg_payload(chat_id=chat_id, message_text=text)
-        subscription.save()
-        return payload
+    def send_tg_message(payload):
+        response = requests.post(TG_SEND_MESSAGE_URL, json=payload)
+        if response.status_code != 200:
+            # TODO обработать неотправленное уведомление пользователю с ссылкой на оплату
+            pass
 
 
 class RefundCreateView(View):
@@ -155,7 +169,5 @@ class RefundCreateView(View):
             payment=db_payment,
             payment_service_id=yoo_refund.get('id')
         )
-        db_payment.is_refunded = True
-        db_payment.save()
         messages.add_message(request, messages.SUCCESS, self.success_message)
         return redirect(self.return_url)

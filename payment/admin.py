@@ -5,7 +5,7 @@ from django.contrib import admin
 from django.utils import timezone
 from django.utils.html import format_html
 
-from .models import Payment, Refund
+from .models import Payment, Refund, PaymentStatus
 
 
 @admin.register(Payment)
@@ -33,6 +33,8 @@ class PaymentAdmin(admin.ModelAdmin):
         if obj.updated_at < timezone.now() - relativedelta(years=1):
             return format_html('<span title="Вернуть ДС можно в течении года с момента оплаты. Для детальной '
                                'информации обратитесь в платежную систему">Возврат невозможен</span>')
+        if obj.status != PaymentStatus.SUCCEEDED:
+            return format_html('<span title="Вернуть ДС можно только за успешного платежа">Возврат невозможен</span>')
 
         if not obj.is_refunded:
             button = (

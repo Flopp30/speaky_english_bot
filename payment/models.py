@@ -1,7 +1,11 @@
-from django.db import models
+import datetime
 
-from user.models import User
-from utils.models import NOT_NULLABLE
+from dateutil.relativedelta import relativedelta
+from django.db import models
+from django.utils import timezone
+
+from subscription.models import Subscription
+from user.models import User, NOT_NULLABLE, NULLABLE
 
 
 class PaymentStatus(models.TextChoices):
@@ -29,7 +33,7 @@ class Payment(models.Model):
         default='YooKassa'
     )
     amount = models.FloatField(verbose_name='Сумма платежа', **NOT_NULLABLE)
-    currency = models.CharField(verbose_name='Валюта платежа',  max_length=128, **NOT_NULLABLE, default='RUB')
+    currency = models.CharField(verbose_name='Валюта платежа', max_length=128, **NOT_NULLABLE, default='RUB')
     created_at = models.DateTimeField(verbose_name='Дата создания', auto_now_add=True)
     updated_at = models.DateTimeField(verbose_name='Дата обновления', auto_now=True)
     user = models.ForeignKey(
@@ -37,6 +41,14 @@ class Payment(models.Model):
         verbose_name='Пользователь',
         related_name='payments',
         on_delete=models.DO_NOTHING
+    )
+
+    subscription = models.ForeignKey(
+        Subscription,
+        verbose_name='Подписка',
+        related_name='subscription',
+        on_delete=models.DO_NOTHING,
+        **NULLABLE
     )
 
     is_refunded = models.BooleanField(verbose_name='Возвращен?', default=False)
@@ -73,9 +85,22 @@ class Refund(models.Model):
     def __str__(self):
         return f"Refund for payment {self.payment.id}"
 
-    @property
-    def link(self):
-        return "link"
+    def success(self):
+        self.status = RefundStatus.SUCCEEDED
+        self.payment.is_refunded = True
+        is_subscription_remain = False
+        if self.payment.subscription:
+            if self.payment.subscription.unsub_date - relativedelta(months=1) < timezone.now():
+                self.payment.subscription.is_active = False
+                self.payment.subscription.is_auto_renew = False
+            else:
+                self.payment.subscription.unsub_date -= relativedelta(months=1)
+                is_subscription_remain = True
+            self.payment.subscription.save()
+
+        self.payment.save()
+        self.save()
+        return is_subscription_remain
 
     class Meta:
         verbose_name = 'Возврат'

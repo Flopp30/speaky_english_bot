@@ -152,7 +152,7 @@
     "fields": {
       "id_name": "group_lessons",
       "name": "Групповые занятия",
-      "price": 0.0,
+      "price": 200.0,
       "currency": "RUB",
       "description": ""
     }
@@ -163,9 +163,41 @@
     "fields": {
       "id_name": "personal_lessons",
       "name": "Индивидуальные занятия",
-      "price": 0.0,
+      "price": 300.0,
       "currency": "RUB",
       "description": ""
+    }
+  },
+  {
+    "model": "product.ExternalLink",
+    "pk": 1,
+    "fields": {
+      "source": "Разговорный клуб High Inter / Upper",
+      "link": "https://google.com/"
+    }
+  },
+  {
+    "model": "product.ExternalLink",
+    "pk": 2,
+    "fields": {
+      "source": "Разговорный клуб Advanced",
+      "link": "https://google.com/"
+    }
+  },
+  {
+    "model": "product.ExternalLink",
+    "pk": 3,
+    "fields": {
+      "source": "Индивидуальные занятия",
+      "link": "https://google.com/"
+    }
+  },
+  {
+    "model": "product.ExternalLink",
+    "pk": 4,
+    "fields": {
+      "source": "Групповые занятия",
+      "link": "https://google.com/"
     }
   }
 ]

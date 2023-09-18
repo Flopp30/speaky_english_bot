@@ -23,12 +23,12 @@ from django.utils import timezone
 from yookassa import Configuration
 
 from payment.models import Payment
-from product.models import Product, ProductType
+from product.models import Product, ProductType, ExternalLink, LinkSources
 from templates.models import Template
 from subscription.models import Subscription
 from user.models import User, Teacher
 from utils.models import MessageTemplates, MessageTeachers
-from utils.services import create_yoo_payment
+from utils.services import create_db_payment
 from utils.periodic_tasks import renew_sub_hourly
 
 logger = logging.getLogger('tbot')
@@ -304,29 +304,6 @@ async def speak_club_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return 'SPEAK_CLUB_LEVEL_CHOICE'
 
 
-async def create_db_payment(product: Product, user: User, additional_data: dict = {}):
-    yoo_payment = create_yoo_payment(
-        payment_amount=product.price,
-        payment_currency=product.currency,
-        product_name=product.name,
-        sub_period='1 месяц',
-        metadata={
-            'product_id': product.id,
-            "user_id": user.id,
-        } | additional_data
-    )
-    url = yoo_payment.get("confirmation", dict()).get(
-        "confirmation_url", None)
-    await Payment.objects.acreate(
-        status=yoo_payment.get('status'),
-        payment_service_id=yoo_payment.get('id'),
-        amount=yoo_payment.get('amount').get('value'),
-        currency=yoo_payment.get('amount').get('currency'),
-        user=user
-    )
-    return url
-
-
 async def handle_speak_club_level_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if not update.callback_query:
@@ -334,8 +311,7 @@ async def handle_speak_club_level_choice(update: Update, context: ContextTypes.D
     if update.callback_query.data in ('upper', 'advanced'):
         user = context.user_data['user'] or await User.objects.aget(chat_id=chat_id)
         product = await Product.objects.aget(id_name="speaky_club")
-        url = create_db_payment(
-            product, user, {"english_lvl": update.callback_query.data, "chat_id": chat_id})
+        url = await create_db_payment(product, user, additional_data={"english_lvl": update.callback_query.data})
         keyboard = [
             [InlineKeyboardButton(
                 f'Оплатить {product.price} {product.currency}', web_app=WebAppInfo(url=url))],
@@ -452,8 +428,9 @@ async def group_club_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text_1 = MessageTemplates.get('group_lessons_1')
     text_2 = MessageTemplates.get('group_lessons_2')
     text_3 = MessageTemplates.get('group_lessons_3')
+    link = await ExternalLink.objects.aget(source=LinkSources.GROUP_LESSONS)
     keyboard = [
-        [InlineKeyboardButton('Анкета', url='http://example.com')]
+        [InlineKeyboardButton('Анкета', url=link.link)]
     ]
     await context.bot.send_message(
         chat_id=chat_id,
@@ -488,8 +465,9 @@ async def group_club_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def personal_lessons_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     text = MessageTemplates.get('personal_lessons_1')
+    link = await ExternalLink.objects.aget(source=LinkSources.PRIVATE_LESSONS)
     keyboard = [
-        [InlineKeyboardButton('Анкета', url='http://example.com')]
+        [InlineKeyboardButton('Анкета', url=link.link)]
     ]
     pagination_keyboard = [
         [InlineKeyboardButton(text='<<', callback_data='TEACHER_PREV')],
@@ -761,9 +739,9 @@ async def reload_from_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     if key == settings.INTERNAL_MESSAGE_KEY:
         if command == '!reload_teachers':
-            await MessageTeachers.load_teachers()
+            await MessageTeachers.load_teachers(context)
         elif command == '!reload_templates':
-            await MessageTemplates.load_templates()
+            await MessageTemplates.load_templates(context)
 
 
 def main():
