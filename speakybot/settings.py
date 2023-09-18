@@ -10,8 +10,12 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 import os
+
+import dj_database_url
+
 from pathlib import Path
 from environs import Env
+
 
 env = Env()
 env.read_env()
@@ -30,10 +34,10 @@ SECRET_KEY = env(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool('DJ_DEBUG', True)
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = env.list('DJ_ALLOWED_HOSTS', ['127.0.0.1'])
 CSRF_TRUSTED_ORIGINS = [
     'https://*.ngrok-free.app'
-]
+] + env.list('DJ_CSRF_TRUSTED_ORIGINS', [])
 
 TELEGRAM_TOKEN = env('TG_TOKEN')
 # Application definition
@@ -107,10 +111,11 @@ WSGI_APPLICATION = 'speakybot.wsgi.application'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': env('DB_PATH', (BASE_DIR / 'db.sqlite3')),
-    }
+    'default': dj_database_url.parse(
+        env('DJ_DB_URL', 'sqlite:///db.sqlite3'),
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
 }
 
 
