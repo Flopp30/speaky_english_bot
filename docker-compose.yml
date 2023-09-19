@@ -45,7 +45,7 @@ services:
     environment:
       DJANGO_SECRET_KEY: "arfdgvds"
       DJ_DEBUG: "True"
-      DJ_ALLOWED_HOSTS: '127.0.0.1,localhost'
+      DJ_ALLOWED_HOSTS: '127.0.0.1,localhost,flopp.ru'
       DJ_CSRF_TRUSTED_ORIGINS: 'http://127.0.0.1:8000'
       DJ_DB_URL: 'postgres://speaky:speakypass@postgres:5432/speakydb'
       MEDIA_ROOT: '/var/www/media'
@@ -63,7 +63,7 @@ services:
   nginx:
     image: nginx
     ports:
-      - 127.0.0.1:8000:80
+      - '8000:80'
     environment:
       UPSTREAM_SERVER: speaky-admin:8000
     volumes:
