@@ -36,7 +36,7 @@ SECRET_KEY = env(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool('DJ_DEBUG', True)
 
-ALLOWED_HOSTS = env.list('DJ_ALLOWED_HOSTS', ['127.0.0.1'])
+ALLOWED_HOSTS = env.list('DJ_ALLOWED_HOSTS', ['127.0.0.1', '3f47-185-203-155-16.ngrok-free.app'])
 CSRF_TRUSTED_ORIGINS = [
     'https://*.ngrok-free.app'
 ] + env.list('DJ_CSRF_TRUSTED_ORIGINS', [])

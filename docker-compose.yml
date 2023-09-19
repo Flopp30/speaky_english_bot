@@ -4,10 +4,8 @@ services:
   
   postgres:
     image: postgres
-    environment:
-      POSTGRES_PASSWORD: speakypass
-      POSTGRES_USER: speaky
-      POSTGRES_DB: speakydb
+    env_file:
+      - ./.env
     volumes:
       - db_data:/var/lib/postgresql/data
       - ./test_data:/test_data
@@ -36,19 +34,16 @@ services:
     build:
       context: .
     image: speaky-django:latest
+    env_file:
+      - ./.env
     ports:
-      - 8000
+      - '8000'
     volumes:
       - ./nginx-templates:/app/nginx-templates
       - nginx_assets:/app/assets/
       - nginx_media:/var/www/media/
     environment:
-      DJANGO_SECRET_KEY: "arfdgvds"
       DJ_DEBUG: "True"
-      DJ_ALLOWED_HOSTS: '127.0.0.1,localhost'
-      DJ_CSRF_TRUSTED_ORIGINS: 'http://127.0.0.1:8000'
-      DJ_DB_URL: 'postgres://speaky:speakypass@postgres:5432/speakydb'
-      MEDIA_ROOT: '/var/www/media'
       
     depends_on:
       - postgres
