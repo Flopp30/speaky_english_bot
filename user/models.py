@@ -62,6 +62,18 @@ class User(models.Model):
         verbose_name = 'Пользователь'
         verbose_name_plural = 'Пользователи'
 
+    @classmethod
+    def fields_to_report(cls):
+        return (
+            'id',
+            'chat_id',
+            'username',
+            'state',
+            'last_visit_time',
+            'registration_datetime',
+            'first_sub_date',
+        )
+
 
 class Teacher(models.Model):
     name = models.CharField(verbose_name='ФИО', max_length=128, **NOT_NULLABLE)

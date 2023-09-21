@@ -1,10 +1,9 @@
-from datetime import datetime
 from dateutil.relativedelta import relativedelta
-
 from django.contrib import admin
 from django.utils import timezone
 from django.utils.html import format_html
 
+from utils.admin_actions import export_to_csv
 from .models import Payment, Refund, PaymentStatus
 
 
@@ -15,10 +14,11 @@ class PaymentAdmin(admin.ModelAdmin):
         'updated_at',
     )
     list_select_related = 'user', 'refund'
-    list_filter = ('created_at', 'updated_at', 'user', 'currency', 'payment_service')
-    ordering = ('-pk', 'created_at', 'updated_at', 'user')
+    list_filter = ('created_at', 'updated_at', 'currency', 'payment_service')
+    actions = [export_to_csv]
+    ordering = ('-pk', 'created_at', 'updated_at', 'user__username')
     list_per_page = 20
-    search_fields = ('id', 'status', 'payment_service_id', 'payment_service', 'amount', 'currency')
+    search_fields = ('id', 'status', 'payment_service_id', 'payment_service', 'amount', 'currency', 'user__username')
 
     def user_(self, obj):
         return format_html(
@@ -57,7 +57,7 @@ class RefundAdmin(admin.ModelAdmin):
     list_filter = ('created_at', 'updated_at',)
     ordering = ('-pk', 'created_at', 'updated_at')
     list_per_page = 20
-    search_fields = ('id', 'status',)
+    search_fields = ('id', 'status', 'payment__user__username')
 
     def user_(self, obj):
         return format_html(

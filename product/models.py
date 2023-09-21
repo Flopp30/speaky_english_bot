@@ -32,6 +32,16 @@ class Product(models.Model):
         verbose_name = 'Продукт'
         verbose_name_plural = 'Продукты'
 
+    @classmethod
+    def fields_to_report(cls):
+        return (
+            'id',
+            'name',
+            'price',
+            'currency',
+            'description',
+        )
+
 
 class LinkSources(models.TextChoices):
     SPEAK_CLUB_UPPER = 'Разговорный клуб High Inter / Upper'
@@ -61,3 +71,11 @@ class ExternalLink(models.Model):
     class Meta:
         verbose_name = 'Ссылка'
         verbose_name_plural = 'Ссылки'
+
+    @classmethod
+    def fields_to_report(cls):
+        return (
+            'id',
+            'source',
+            'link',
+        )

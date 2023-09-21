@@ -70,6 +70,16 @@
             <form id="send-message-form" method="POST" action="{% url 'users:send_message' %}">
                 {% csrf_token %}
                 <div class="form-group">
+                    <label for="id_to_users">С ссылкой на оплату?</label>
+                    <select name="to_users" id="id_to_users">
+                        <option value="current" selected>Только для этого пользователя</option>
+                        <option value="all">Для всех</option>
+                        <option value="all_unsub">Для всех неподписанных</option>
+                        <option value="all_subs">Для всех подписанных</option>
+                        <option value="personal">Для подписчиков на индивидуальные занятие</option>
+                        <option value="group">Для подписчиков на групповые занятие</option>
+                        <option value="speak_club">Для подписчиков разговорного клуба</option>
+                    </select>
                     <label for="id_with_link">С ссылкой на оплату?</label>
                     <select name="with_link" id="id_with_link">
                         <option value="False" selected>Без ссылки</option>

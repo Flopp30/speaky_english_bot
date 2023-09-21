@@ -53,6 +53,21 @@ class Payment(models.Model):
 
     is_refunded = models.BooleanField(verbose_name='Возвращен?', default=False)
 
+    @classmethod
+    def fields_to_report(cls):
+        return (
+            'id',
+            'status',
+            'payment_service',
+            'amount',
+            'currency',
+            'created_at',
+            'updated_at',
+            'user',
+            'subscription',
+            'is_refunded',
+        )
+
     def __str__(self):
         return f"{self.id}: {self.amount} from {self.user}"
 

@@ -37,10 +37,7 @@ SECRET_KEY = env(
 DEBUG = env.bool('DJ_DEBUG', True)
 
 ALLOWED_HOSTS = env.list('DJ_ALLOWED_HOSTS', ['127.0.0.1'])
-CSRF_TRUSTED_ORIGINS = [
-    'https://*.ngrok-free.app'
-] + env.list('DJ_CSRF_TRUSTED_ORIGINS', [])
-
+CSRF_TRUSTED_ORIGINS = env.list('DJ_CSRF_TRUSTED_ORIGINS', [])
 TELEGRAM_TOKEN = env('TG_TOKEN')
 # Application definition
 

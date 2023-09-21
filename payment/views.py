@@ -37,11 +37,11 @@ class YooPaymentCallBackView(View):
                         .select_related('user', 'subscription')
                         .get(
                             payment_service='YooKassa',
-                            payment_service_id=returned_obj.get('id')
+                            payment_service_id=returned_obj.get('id'),
+                            status=PaymentStatus.PENDING,
                         )
                     )
-                except (Payment.DoesNotExist):
-                    # TODO обработать ошибку платежа?
+                except Payment.DoesNotExist:
                     return JsonResponse({"status": "success"})
 
                 if event == "payment.succeeded":
@@ -65,6 +65,7 @@ class YooPaymentCallBackView(View):
             subscription.unsub_date = datetime.datetime.now() + relativedelta(months=1)
             subscription.verified_payment_id = returned_obj.get('payment_method', {}).get('id', None)
             payment.subscription = subscription
+            subscription.user.first_sub_date = datetime.datetime.now()
         else:
             subscription.unsub_date = subscription.unsub_date + relativedelta(months=1)
 
@@ -100,6 +101,7 @@ class YooPaymentCallBackView(View):
 
         subscription.save()
         payment.save()
+        subscription.user.save()
         self.send_tg_message(payload)
 
     def process_payment_canceled(self, payment):

@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from utils.admin_actions import export_to_csv
 from .models import Product, ExternalLink
 
 
@@ -8,6 +9,7 @@ class ProductAdmin(admin.ModelAdmin):
     list_display = (
         'id', 'name', 'price', 'currency', 'description'
     )
+    actions = [export_to_csv]
     list_filter = ('price', 'currency')
     ordering = ('-id', 'price')
     list_per_page = 20
@@ -19,6 +21,7 @@ class ExternalLinkAdmin(admin.ModelAdmin):
     list_display = (
         'id', 'source', 'link', )
     list_filter = ('source',)
+    actions = [export_to_csv]
     ordering = ('-id',)
     list_per_page = 20
     search_fields = ('id', 'source', 'link',)
