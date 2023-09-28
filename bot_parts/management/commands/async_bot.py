@@ -29,7 +29,7 @@ from subscription.models import Subscription
 from user.models import User, Teacher
 from utils.models import MessageTemplates, MessageTeachers
 from utils.services import create_db_payment
-from utils.periodic_tasks import renew_sub_hourly
+from utils.periodic_tasks import renew_sub_hourly, send_reminders
 
 logger = logging.getLogger('tbot')
 
@@ -64,8 +64,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             'username': update.effective_chat.username
         }
     )
-    if context.user_data['user'].is_superuser:
-        return await staff_functions_select(update, context)
     if context.user_data['user'].state != 'NEW':
         return await welcome_letter(update, context)
     text = dedent(f"""
@@ -84,28 +82,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     context.user_data['user'].state = 'START'
     return 'START'
-
-
-async def staff_functions_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    text = dedent(f"""
-        Здравствуйте, {context.user_data['user'].username}.
-        Хотите посмотреть списки пользователей с активными подписками?
-    """)
-    keyboard = [
-        [InlineKeyboardButton('Активные пользователи', callback_data='users')]
-    ]
-    await context.bot.send_message(
-        chat_id,
-        text=text,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode='HTML',
-    )
-    await context.bot.delete_message(
-        chat_id=chat_id,
-        message_id=update.effective_message.message_id
-    )
-    return 'AWAIT_ADMIN_CHOICE'
 
 
 async def welcome_letter(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -321,7 +297,7 @@ async def handle_speak_club_level_choice(update: Update, context: ContextTypes.D
             text="Ссылка на оплату месячной подписки:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-        return "START"
+        return "START_AFTER_CLUB_PAYMENT"
     elif update.callback_query.data == 'lower':
         return await speak_club_lower(update, context)
     else:
@@ -459,7 +435,7 @@ async def group_club_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
-    return 'START'
+    return 'START_AFTER_GROUP_LESSONS'
 
 
 async def personal_lessons_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -560,135 +536,27 @@ async def teacher_pagination(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return 'START'
 
 
-async def handle_admin_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_reminder_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if not update.callback_query:
-        return 'AWAIT_ADMIN_CHOICE'
-    if update.callback_query.data == 'users':
-        subscriptions = Subscription.objects.filter(
-            is_active=True).select_related('product', 'user')
-        groups = {}
-        async for subscription in subscriptions:
-            groups[subscription.product.name] = groups.get(
-                subscription.product.name, []) + [subscription.user.username]
-        groups_texts = '\n'.join(
-            [f'<b>{key}</b>: {", ".join(value)}' for key, value in groups.items()])
-        text = dedent(f"""
-        В настоящее время активно {len(subscriptions)} подписок.
-        Следующие группы:
-        {groups_texts}
-        Хотите отправить сообщения учащимся в группу?
-    """)
-        keyboard = [
-            [InlineKeyboardButton(f'{key}', callback_data=key)
-             for key in groups.keys()]
-        ] + [[InlineKeyboardButton('В главное меню', callback_data='start')]]
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=text,
-            parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup(keyboard),
-        )
-        await context.bot.delete_message(
-            chat_id=chat_id,
-            message_id=update.effective_message.message_id
-        )
-        return 'AWAIT_ADMIN_GROUP_CHOICE'
-    return 'AWAIT_ADMIN_CHOICE'
-
-
-async def handle_admin_group_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    if not update.callback_query:
-        return 'AWAIT_ADMIN_GROUP_CHOICE'
-    response = update.callback_query.data
-    if response == 'start':
+        return 'AWAIT_REMINDER_CHOICE'
+    if update.callback_query.data == 'welcome_choice':
         return await start(update, context)
-    context.chat_data['group_for_message'] = response
-    keyboard = [
-        [InlineKeyboardButton('Вернуться к выбору групп',
-                              callback_data='back')]
-    ]
-    text = dedent(f"""
-    Введите сообщение, которое бы вы хотели отправить учащимся группы {response}.
-""")
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=text,
-        parse_mode='HTML',
-        reply_markup=InlineKeyboardMarkup(keyboard),
-    )
-    await context.bot.delete_message(
-        chat_id=chat_id,
-        message_id=update.effective_message.message_id
-    )
-    return 'AWAIT_MESSAGE_FOR_GROUP'
-
-
-async def prepare_message_for_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    if update.callback_query and update.callback_query.data == 'back':
-        return await handle_admin_choice(update, context)
-    if update.message and update.message.text:
-        group_name = context.chat_data.get('group_for_message')
-        context.chat_data['message_to_send'] = update.message
-        keyboard = [
-            [InlineKeyboardButton('Отправить', callback_data='confirm'),
-             InlineKeyboardButton('Изменить', callback_data='edit')],
-        ]
+    elif update.callback_query.data == 'want_to_club':
+        return await speak_club_start(update, context)
+    elif update.callback_query.data == 'question':
+        username = update.effective_chat.username
         await context.bot.send_message(
             chat_id=chat_id,
-            text=update.message.text,
-            entities=update.message.entities,
+            text=MessageTemplates.get('need_feedback')
         )
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=f"Хотите отправить такое сообщение учащимся группы {group_name}?",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-        )
-        return 'AWAIT_GROUP_MESSAGE_CONFIRMATION'
-
-
-async def send_message_for_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    if not update.callback_query:
-        return 'AWAIT_GROUP_MESSAGE_CONFIRMATION'
-    group_name = context.chat_data.get('group_for_message')
-    if update.callback_query.data == 'edit':
-        keyboard = [
-            [InlineKeyboardButton(
-                'Вернуться к выбору групп', callback_data='back')]
-        ]
-        text = dedent(f"""
-        Введите сообщение, которое бы вы хотели отправить учащимся группы {group_name}.
-    """)
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=text,
-            parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup(keyboard),
-        )
-        await context.bot.delete_message(
-            chat_id=chat_id,
-            message_id=update.effective_message.message_id
-        )
-        return 'AWAIT_MESSAGE_FOR_GROUP'
-    if update.callback_query.data != 'confirm':
-        return 'AWAIT_GROUP_MESSAGE_CONFIRMATION'
-    group_subscriptions = Subscription.objects.select_related(
-        'product', 'user').filter(product__name=group_name)
-    message_to_send = context.chat_data['message_to_send']
-    for subscription in group_subscriptions:
-        await context.bot.send_message(
-            chat_id=subscription.user.chat_id,
-            text=message_to_send.message.text,
-            entities=message_to_send.entities,
-        )
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=f'Сообщение отправлено учащимся группы {group_name}'
-    )
-    return await start(update, context)
+        async for user in User.objects.filter(is_superuser=True):
+            await context.bot.send_message(
+                chat_id=user.chat_id,
+                text=F'У пользователя {username} есть вопросы о школе'
+            )
+        return 'START'
+    return 'START'
 
 
 async def user_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -713,17 +581,16 @@ async def user_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     states_function = {
         'NEW': start,
         'START': start,
+        'START_AFTER_CLUB_PAYMENT': start,
+        'START_AFTER_GROUP_LESSONS': start,
         'WELCOME_CHOICE': handle_welcome_choice,
         'SPEAK_CLUB_LEVEL_CHOICE': handle_speak_club_level_choice,
         'LOWER_LEVEL_CHOICE': handle_lower_level_choice,
         'AWAIT_LEVEL_TEST_CONFIRMATION': handle_level_test_confirmation,
         'TEACHER_PAGINATION': teacher_pagination,
-        'AWAIT_ADMIN_CHOICE': handle_admin_choice,
-        'AWAIT_ADMIN_GROUP_CHOICE': handle_admin_group_choice,
-        'AWAIT_MESSAGE_FOR_GROUP': prepare_message_for_group,
-        'AWAIT_GROUP_MESSAGE_CONFIRMATION': send_message_for_group,
         'AWAIT_SUBSCRIPTION_ACTION': handle_subscription_action,
-        'USER_SUBSCRIPTIONS_CHOICE': handle_user_subscriptions_choice
+        'USER_SUBSCRIPTIONS_CHOICE': handle_user_subscriptions_choice,
+        'AWAIT_REMINDER_CHOICE': handle_reminder_choice,
     }
 
     state_handler = states_function[user_state]
@@ -762,6 +629,8 @@ def main():
                             interval=timedelta(minutes=10), first=1)
     job_queue.run_repeating(MessageTeachers.load_teachers,
                             interval=timedelta(minutes=10), first=1)
+    job_queue.run_repeating(send_reminders,
+                            interval=timedelta(hours=1), first=1)
 
     application.add_handler(PrefixHandler(
         '!', ['reload_templates', 'reload_teachers'], reload_from_db))
