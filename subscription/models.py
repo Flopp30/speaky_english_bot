@@ -1,7 +1,5 @@
 from django.db import models
 
-from datetime import datetime
-
 from product.models import Product
 from user.models import User
 from utils.models import NULLABLE, NOT_NULLABLE

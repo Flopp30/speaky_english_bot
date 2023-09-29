@@ -36,7 +36,7 @@ SECRET_KEY = env(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool('DJ_DEBUG', True)
 
-ALLOWED_HOSTS = env.list('DJ_ALLOWED_HOSTS', ['127.0.0.1'])
+ALLOWED_HOSTS = env.list('DJ_ALLOWED_HOSTS', ['127.0.0.1', 'ac46-185-203-155-16.ngrok-free.app'])
 CSRF_TRUSTED_ORIGINS = env.list('DJ_CSRF_TRUSTED_ORIGINS', [])
 TELEGRAM_TOKEN = env('TG_TOKEN')
 # Application definition

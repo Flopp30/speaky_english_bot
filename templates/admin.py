@@ -10,5 +10,5 @@ class TemplateAdmin(admin.ModelAdmin):
         'id', 'name', 'content',
     )
     ordering = ('-id',)
-    list_per_page = 20
+    list_per_page = 30
     search_fields = ('name', 'content')

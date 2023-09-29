@@ -1,35 +1,29 @@
 import logging
-import re
-
-import requests
-
 from asyncio import sleep
-
-from datetime import timedelta, datetime
+from datetime import timedelta
 from textwrap import dedent
 
-from asgiref.sync import sync_to_async
-from django.template import Context, Template as DjTemplate
-
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, InputFile, InputMediaPhoto
-from telegram.ext import (ApplicationBuilder, ContextTypes,
-                          CommandHandler, MessageHandler, CallbackQueryHandler, PreCheckoutQueryHandler, PrefixHandler,
-                          filters)
-
+import requests
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from django.db.models import Count
-from django.utils import timezone
-from yookassa import Configuration
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, InputFile, InputMediaPhoto
+from telegram.ext import (
+    ApplicationBuilder,
+    ContextTypes,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    PrefixHandler,
+    filters
+)
 
-from payment.models import Payment
-from product.models import Product, ProductType, ExternalLink, LinkSources
-from templates.models import Template
+from product.models import Product, ProductType, ExternalLink, LinkSources, SalesAvailability
 from subscription.models import Subscription
-from user.models import User, Teacher
+from user.models import User
+from utils.helpers import send_tg_message_to_admins
 from utils.models import MessageTemplates, MessageTeachers
+from utils.periodic_tasks import renew_sub_hourly, send_reminders_hourly
 from utils.services import create_db_payment
-from utils.periodic_tasks import renew_sub_hourly, send_reminders
 
 logger = logging.getLogger('tbot')
 
@@ -99,7 +93,7 @@ async def welcome_letter(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data['subscriptions']:
         keyboard.append([InlineKeyboardButton(
             'Ваши активные подписки', callback_data='current_subscriptions')])
-    text = MessageTemplates.templates.get('welcome_letter', 'Нужен шаблон welcome_letter. {username}').format(
+    text = MessageTemplates.templates.get('welcome_letter').format(
         username=context.user_data['user'].username)
     await context.bot.send_message(
         chat_id,
@@ -136,12 +130,12 @@ async def show_current_subscriptions(update: Update, context: ContextTypes.DEFAU
         for subscription in context.user_data['subscriptions'].values()
     ]
     keyboard.append([InlineKeyboardButton('Назад', callback_data='back')])
-    subs_text = '\n'.join([f"{subscription.product.name} до {subscription.unsub_date.strftime('%Y-%m-%d')}\
-                           {'автопродление включено' if subscription.is_auto_renew else ''}"
+    subs_text = '\n'.join([f"{subscription.product.name} до {subscription.unsub_date.strftime('%Y-%m-%d')}"
+                           f"{'- автопродление' if subscription.is_auto_renew else ''}"
                            for subscription in context.user_data['subscriptions'].values()])
-    text = dedent(f"""В настоящее время вы подписаны на следующие продукты:
-                  {subs_text}
-                  Хотите отредактировать свои текущие подписки?""")
+    text = dedent(f"В настоящее время вы подписаны на следующие продукты:"
+                  f"{subs_text}"
+                  "\nХотите отредактировать свои текущие подписки?")
     await context.bot.send_message(
         chat_id=chat_id,
         text=text,
@@ -202,8 +196,7 @@ async def handle_subscription_action(update: Update, context: ContextTypes.DEFAU
         action, sub_id = update.callback_query.data.split('-')
     except ValueError:
         return 'AWAIT_SUBSCRIPTION_ACTION'
-    subscription: Subscription = context.user_data['subscriptions'].get(
-        int(sub_id))
+    subscription: Subscription = context.user_data['subscriptions'].get(int(sub_id))
     if not subscription:
         return 'AWAIT_SUBSCRIPTION_ACTION'
     if action == 'turn_on':
@@ -211,7 +204,11 @@ async def handle_subscription_action(update: Update, context: ContextTypes.DEFAU
             subscription.is_auto_renew = True
             await subscription.asave()
             text = f'Автопродление подписки на {subscription.product.name} включено'
-        # TODO Обработать случай, когда нет сохраненного айдишника для постоянного платежа
+        else:
+            text = (
+                f'Для автопродления подписки {subscription.product.name} нам нужно получить хотя бы один '
+                f'платеж из бота.\n После завершения текущей подписки - оформите её заново'
+            )
     elif action == 'turn_off':
         subscription.is_auto_renew = False
         await subscription.asave()
@@ -235,13 +232,27 @@ async def speak_club_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text_2 = MessageTemplates.get('speaky_club_2')
     text_3 = MessageTemplates.get('speaky_club_3')
     text_4 = MessageTemplates.get('speaky_club_4')
-    keyboard = [
-        [InlineKeyboardButton('High Inter / Upper', callback_data='upper')],
-        [InlineKeyboardButton('Advanced', callback_data='advanced')],
+    sales_availability = await SalesAvailability.objects.aget(pk=1)
+    keyboard = []
+    is_not_available = False
+    if sales_availability.wednesday_upper:
+        keyboard.append([InlineKeyboardButton('High Inter / Upper СР, 19:00', callback_data='upper_wed')])
+    else:
+        text_4 += ('\nК сожалению, в группе High Inter / Upper СР, 19:00 нет мест.')
+        is_not_available = True
+    if sales_availability.thursday_upper:
+        keyboard.append([InlineKeyboardButton('High Inter / Upper ЧТ, 19:00', callback_data='upper_thur')])
+    else:
+        text_4 += '\nК сожалению, в группе High Inter / Upper ЧТ, 19:00 нет мест.'
+        is_not_available = True
+    if is_not_available:
+        text_4 += '\n\nНапиши @dasha_speaky для уточнения. Мы точно сможем найти решение 🌍'
+
+    keyboard.extend([
         [InlineKeyboardButton('Мой уровень ниже', callback_data='lower')],
         [InlineKeyboardButton('Не знаю свой уровень',
                               callback_data='dont_know')],
-    ]
+    ])
     await context.bot.send_message(
         chat_id,
         text=text_1,
@@ -284,7 +295,7 @@ async def handle_speak_club_level_choice(update: Update, context: ContextTypes.D
     chat_id = update.effective_chat.id
     if not update.callback_query:
         return 'SPEAK_CLUB_LEVEL_CHOICE'
-    if update.callback_query.data in ('upper', 'advanced'):
+    if update.callback_query.data in ('upper_wed', 'upper_thur'):
         user = context.user_data['user'] or await User.objects.aget(chat_id=chat_id)
         product = await Product.objects.aget(id_name="speaky_club")
         url = await create_db_payment(product, user, additional_data={"english_lvl": update.callback_query.data})
@@ -391,11 +402,10 @@ async def handle_level_test_confirmation(update: Update, context: ContextTypes.D
             message_id=update.effective_message.message_id
         )
         username = update.effective_chat.username
-        async for user in User.objects.filter(is_superuser=True):
-            await context.bot.send_message(
-                chat_id=user.chat_id,
-                text=F'Пользователь {username} хотел бы пройти тест своего языкового уровня'
-            )
+        tg_link = f'https://web.telegram.org/#{chat_id}'
+        admins_text = (f'Пользователь @{username} хотел бы пройти тест своего языкового уровня\n'
+                       f'Ссылка на пользователя: {tg_link}')
+        send_tg_message_to_admins(admins_text)
         return 'START'
 
 
@@ -404,7 +414,7 @@ async def group_club_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text_1 = MessageTemplates.get('group_lessons_1')
     text_2 = MessageTemplates.get('group_lessons_2')
     text_3 = MessageTemplates.get('group_lessons_3')
-    link = await ExternalLink.objects.aget(source=LinkSources.GROUP_LESSONS)
+    link = await ExternalLink.objects.aget(source=LinkSources.FORM_GROUP_LESSONS)
     keyboard = [
         [InlineKeyboardButton('Анкета', url=link.link)]
     ]
@@ -441,7 +451,7 @@ async def group_club_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def personal_lessons_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     text = MessageTemplates.get('personal_lessons_1')
-    link = await ExternalLink.objects.aget(source=LinkSources.PRIVATE_LESSONS)
+    link = await ExternalLink.objects.aget(source=LinkSources.FORM_PERSONAL_LESSONS)
     keyboard = [
         [InlineKeyboardButton('Анкета', url=link.link)]
     ]
@@ -545,16 +555,14 @@ async def handle_reminder_choice(update: Update, context: ContextTypes.DEFAULT_T
     elif update.callback_query.data == 'want_to_club':
         return await speak_club_start(update, context)
     elif update.callback_query.data == 'question':
+        tg_link = f'https://web.telegram.org/#{chat_id}'
         username = update.effective_chat.username
         await context.bot.send_message(
             chat_id=chat_id,
             text=MessageTemplates.get('need_feedback')
         )
-        async for user in User.objects.filter(is_superuser=True):
-            await context.bot.send_message(
-                chat_id=user.chat_id,
-                text=F'У пользователя {username} есть вопросы о школе'
-            )
+        admins_text = f'У пользователя @{username} есть вопросы о школе\nСсылка: {tg_link}'
+        send_tg_message_to_admins(admins_text)
         return 'START'
     return 'START'
 
@@ -600,15 +608,27 @@ async def user_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def reload_from_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        command, key = update.message.text.split('|')
-    except ValueError:
-        return
-    if key == settings.INTERNAL_MESSAGE_KEY:
-        if command == '!reload_teachers':
+    chat_id = update.effective_chat.id
+    if not context.user_data.get('user'):
+        context.user_data['user'], _ = await User.objects.prefetch_related('subscriptions').aget_or_create(
+            chat_id=chat_id,
+            defaults={
+                'username': update.effective_chat.username
+            }
+        )
+    if context.user_data['user'].is_superuser:
+        if update.message.text == '!reload_teachers':
             await MessageTeachers.load_teachers(context)
-        elif command == '!reload_templates':
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text='Учителя обновлены успешно',
+            )
+        elif update.message.text == '!reload_templates':
             await MessageTemplates.load_templates(context)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text='Шаблоны сообщений обновлены успешно',
+            )
 
 
 def main():
@@ -629,7 +649,7 @@ def main():
                             interval=timedelta(minutes=10), first=1)
     job_queue.run_repeating(MessageTeachers.load_teachers,
                             interval=timedelta(minutes=10), first=1)
-    job_queue.run_repeating(send_reminders,
+    job_queue.run_repeating(send_reminders_hourly,
                             interval=timedelta(hours=1), first=1)
 
     application.add_handler(PrefixHandler(

@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from utils.admin_actions import export_to_csv
-from .models import Product, ExternalLink
+from .models import Product, ExternalLink, SalesAvailability
 
 
 @admin.register(Product)
@@ -25,3 +25,10 @@ class ExternalLinkAdmin(admin.ModelAdmin):
     ordering = ('-id',)
     list_per_page = 20
     search_fields = ('id', 'source', 'link',)
+
+
+@admin.register(SalesAvailability)
+class SalesAvailabilityAdmin(admin.ModelAdmin):
+    list_display = (
+        'id', 'wednesday_upper', 'thursday_upper', )
+    ordering = ('-id',)

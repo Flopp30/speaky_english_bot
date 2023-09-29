@@ -1,5 +1,6 @@
 import datetime
 import json
+import logging
 
 import requests
 from dateutil.relativedelta import relativedelta
@@ -14,8 +15,11 @@ from payment.models import Payment, PaymentStatus, Refund
 from product.models import LinkSources, ExternalLink, ProductType, Product
 from speakybot import settings
 from subscription.models import Subscription
-from utils.helpers import get_tg_payload
+from user.models import User
+from utils.helpers import get_tg_payload, send_tg_message_to_admins
 from utils.services import create_yoo_refund
+
+logger = logging.getLogger(__name__)
 
 
 class YooPaymentCallBackView(View):
@@ -28,7 +32,11 @@ class YooPaymentCallBackView(View):
         returned_obj, event = request_data.get('object'), request_data.get('event')
         match event:
             case "refund.succeeded":
-                self.process_refund(returned_obj)
+                try:
+                    self.process_refund(returned_obj)
+                except Refund.DoesNotExist:
+                    logger.error(f'Problem with refund: {request_data}')
+                    return JsonResponse({"status": "success"})
 
             case "payment.succeeded" | "payment.canceled":
                 try:
@@ -66,6 +74,7 @@ class YooPaymentCallBackView(View):
             subscription.verified_payment_id = returned_obj.get('payment_method', {}).get('id', None)
             payment.subscription = subscription
             subscription.user.first_sub_date = datetime.datetime.now()
+            subscription.user.save()
         else:
             subscription.unsub_date = subscription.unsub_date + relativedelta(months=1)
 
@@ -74,8 +83,14 @@ class YooPaymentCallBackView(View):
         match product.id_name:
             case ProductType.SPEAKY_CLUB:
                 english_lvl = metadata.get('english_lvl')
-                group_name = LinkSources.SPEAK_CLUB_UPPER if english_lvl == 'upper' else LinkSources.SPEAK_CLUB_ADV
-                link = ExternalLink.objects.filter(source=group_name).first()
+                if english_lvl == 'upper_wed':
+                    link_source = LinkSources.CHAT_SPEAK_CLUB_UPPER_WED
+                    group_name = 'Разговорный клуб High Inter / Upper (Среда 19:00)'
+                else:
+                    link_source = LinkSources.CHAT_SPEAK_CLUB_UPPER_THUR
+                    group_name = 'Разговорный клуб High Inter / Upper (Четверг 19:00)'
+
+                link = ExternalLink.objects.filter(source=link_source).first()
 
                 if is_create and link:
                     text += f"Подписка в '{group_name}' оформлена до {unsub_date_formatted}"
@@ -90,19 +105,21 @@ class YooPaymentCallBackView(View):
 
             case _:
                 if product.id_name == ProductType.PERSONAL_LESSONS:
-                    group_name = LinkSources.PRIVATE_LESSONS
+                    group_name = 'групповые занятия'
                 else:
-                    group_name = LinkSources.GROUP_LESSONS
+                    group_name = 'индивидуальные занятия'
                 if is_create:
-                    text += f"Подписка в '{group_name}' оформлена до {unsub_date_formatted}"
+                    text += f"Подписка на {group_name} оформлена до {unsub_date_formatted}"
                 else:
-                    text += f"Подписка в '{group_name}' продлена до {unsub_date_formatted}"
+                    text += f"Подписка на {group_name} продлена до {unsub_date_formatted}"
                 payload = get_tg_payload(chat_id=payment.user.chat_id, message_text=text)
 
         subscription.save()
         payment.save()
-        subscription.user.save()
         self.send_tg_message(payload)
+
+        admins_text = (f"Поступил платеж {payment.amount} {payment.currency} от @{subscription.user.username}")
+        send_tg_message_to_admins(admins_text)
 
     def process_payment_canceled(self, payment):
         payment.status = PaymentStatus.CANCELED
@@ -132,14 +149,16 @@ class YooPaymentCallBackView(View):
 
         payload = get_tg_payload(chat_id=refund.payment.user.chat_id, message_text=text)
         self.send_tg_message(payload)
-        # TODO отправить Даше сообщение о успешно проведенном возврате?
+
+        admins_text = (f"Возврат суммы {refund.payment.amount} {refund.payment.currency} для пользователя "
+                       f"@{refund.payment.user.username} проведен успешно.\n")
+        send_tg_message_to_admins(admins_text)
 
     @staticmethod
     def send_tg_message(payload):
         response = requests.post(settings.TG_SEND_MESSAGE_URL, json=payload)
         if response.status_code != 200:
-            # TODO обработать неотправленное уведомление пользователю с ссылкой на оплату
-            pass
+            logger.error(f'Не удалось отправить сообщение: {payload}')
 
 
 class RefundCreateView(View):

@@ -44,10 +44,10 @@ class Product(models.Model):
 
 
 class LinkSources(models.TextChoices):
-    SPEAK_CLUB_UPPER = 'Разговорный клуб High Inter / Upper'
-    SPEAK_CLUB_ADV = 'Разговорный клуб Advanced'
-    PRIVATE_LESSONS = 'Индивидуальные занятия'
-    GROUP_LESSONS = 'Групповые занятия'
+    CHAT_SPEAK_CLUB_UPPER_WED = 'Чат: Разговорный клуб High Inter / Upper (Среда 19:00).'
+    CHAT_SPEAK_CLUB_UPPER_THUR = 'Чат: Разговорный клуб High Inter / Upper (Четверг 19:00).'
+    FORM_GROUP_LESSONS = 'Форма: Групповые занятия'
+    FORM_PERSONAL_LESSONS = 'Форма: Индивидуальные занятия'
 
 
 class ExternalLink(models.Model):
@@ -79,3 +79,12 @@ class ExternalLink(models.Model):
             'source',
             'link',
         )
+
+
+class SalesAvailability(models.Model):
+    wednesday_upper = models.BooleanField(verbose_name='Есть места в High inter/upper: среда 19:00', default=True)
+    thursday_upper = models.BooleanField(verbose_name='Есть места в High inter/upper: четверг 19:00', default=True)
+
+    class Meta:
+        verbose_name = 'Есть места в группах?'
+        verbose_name_plural = 'Есть места в группах?'
