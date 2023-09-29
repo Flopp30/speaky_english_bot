@@ -644,13 +644,13 @@ def main():
     application = ApplicationBuilder().token(settings.TELEGRAM_TOKEN).build()
     job_queue = application.job_queue
     job_queue.run_repeating(
-        renew_sub_hourly, interval=timedelta(hours=1), first=5)
+        renew_sub_hourly, interval=timedelta(hours=1), first=6)
     job_queue.run_repeating(MessageTemplates.load_templates,
-                            interval=timedelta(minutes=10), first=1)
+                            interval=timedelta(minutes=10), first=3)
     job_queue.run_repeating(MessageTeachers.load_teachers,
-                            interval=timedelta(minutes=10), first=1)
+                            interval=timedelta(minutes=10), first=4)
     job_queue.run_repeating(send_reminders_hourly,
-                            interval=timedelta(hours=1), first=1)
+                            interval=timedelta(hours=1), first=5)
 
     application.add_handler(PrefixHandler(
         '!', ['reload_templates', 'reload_teachers'], reload_from_db))

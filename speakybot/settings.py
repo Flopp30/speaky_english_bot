@@ -45,7 +45,7 @@ BOT_MODE = env('BOT_MODE', 'polling')
 
 LOG_LEVEL = env.int('LOG_LEVEL', 10)
 
-TG_BOT_URL = env('BOT_UTL', 'https://google.com/')
+TG_BOT_URL = env('BOT_UTL', 'https://web.telegram.org/k/#@english_speaky_bot')
 TELEGRAM_API_URL = f'https://api.telegram.org/bot{TELEGRAM_TOKEN}/'
 TG_SEND_MESSAGE_URL = settings.TELEGRAM_API_URL + 'sendMessage'
 
@@ -54,10 +54,8 @@ TG_SEND_MESSAGE_URL = settings.TELEGRAM_API_URL + 'sendMessage'
 # YOO_SHOP_ID = env('SHOP_ID', '322466')  # Дашин шоп id
 
 YOO_TOKEN = env(
-    'YOO_TOKEN', 'test_MC3lMB_QVPrNgwbvtTAYXMnBvPzc0Nez5-mzvCCchIk')  # Мой токен
-YOO_SHOP_ID = env('SHOP_ID', '210134')  # Мой шоп id
-
-INTERNAL_KEY = env('INTERNAL_KEY', 'qertywgbt4wef2d13fg4236j7k64jrydg')
+    'YOO_TOKEN', '')  # Мой токен
+YOO_SHOP_ID = env('SHOP_ID', '')  # Мой шоп id
 
 INSTALLED_APPS = [
     'django.contrib.admin',
