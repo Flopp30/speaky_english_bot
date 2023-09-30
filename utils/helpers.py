@@ -42,3 +42,20 @@ async def send_message_to_admins_from_bot(bot_context, text):
             chat_id=chat_id,
             text=text,
         )
+
+
+async def check_bot_context(update, context):
+    if not context.user_data.get('user'):
+        context.user_data['user'], _ = await User.objects.prefetch_related('subscriptions').aget_or_create(
+            chat_id=update.effective_chat.id,
+            defaults={
+                'username': update.effective_chat.username
+            }
+        )
+    if not context.user_data.get('subscriptions'):
+        context.user_data['subscriptions'] = {
+            subscription.id: subscription
+            async for subscription in
+            context.user_data['user'].subscriptions.filter(
+                is_active=True).select_related('product')
+        }

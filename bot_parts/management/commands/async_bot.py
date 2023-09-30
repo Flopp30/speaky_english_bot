@@ -20,7 +20,7 @@ from telegram.ext import (
 from product.models import Product, ProductType, ExternalLink, LinkSources, SalesAvailability
 from subscription.models import Subscription
 from user.models import User
-from utils.helpers import send_message_to_admins_from_bot
+from utils.helpers import send_message_to_admins_from_bot, check_bot_context
 from utils.models import MessageTemplates, MessageTeachers
 from utils.periodic_tasks import renew_sub_hourly, send_reminders_hourly
 from utils.services import create_db_payment
@@ -80,9 +80,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def welcome_letter(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    context.user_data['subscriptions'] = {subscription.id: subscription async for subscription in
-                                          context.user_data['user'].subscriptions.filter(
-                                              is_active=True).select_related('product')}
+    await check_bot_context(update, context)
+
     keyboard = [
         [InlineKeyboardButton("Разговорный клуб", callback_data='speak_club')],
         [InlineKeyboardButton("Групповые занятия",
@@ -123,6 +122,7 @@ async def handle_welcome_choice(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def show_current_subscriptions(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await check_bot_context(update, context)
     chat_id = update.effective_chat.id
     keyboard = [
         [InlineKeyboardButton(
@@ -149,6 +149,7 @@ async def show_current_subscriptions(update: Update, context: ContextTypes.DEFAU
 
 
 async def handle_user_subscriptions_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await check_bot_context(update, context)
     if not update.callback_query:
         return 'USER_SUBSCRIPTIONS_CHOICE'
     if update.callback_query.data == 'back':
@@ -187,6 +188,7 @@ async def handle_user_subscriptions_choice(update: Update, context: ContextTypes
 
 
 async def handle_subscription_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await check_bot_context(update, context)
     if not update.callback_query:
         return 'AWAIT_SUBSCRIPTION_ACTION'
     if update.callback_query.data == 'back':
@@ -232,7 +234,8 @@ async def speak_club_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text_2 = MessageTemplates.get('speaky_club_2')
     text_3 = MessageTemplates.get('speaky_club_3')
     text_4 = MessageTemplates.get('speaky_club_4')
-    sales_availability = await SalesAvailability.objects.aget(pk=1)
+    sales_availability = await SalesAvailability.objects.afirst()
+    await check_bot_context(update, context)
     keyboard = []
     is_not_available = False
     if sales_availability.wednesday_upper:
@@ -293,10 +296,11 @@ async def speak_club_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_speak_club_level_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
+    await check_bot_context(update, context)
     if not update.callback_query:
         return 'SPEAK_CLUB_LEVEL_CHOICE'
     if update.callback_query.data in ('upper_wed', 'upper_thur'):
-        user = context.user_data['user'] or await User.objects.aget(chat_id=chat_id)
+        user = context.user_data['user']
         product = await Product.objects.aget(id_name="speaky_club")
         url = await create_db_payment(product, user, additional_data={"english_lvl": update.callback_query.data})
         keyboard = [
@@ -317,6 +321,7 @@ async def handle_speak_club_level_choice(update: Update, context: ContextTypes.D
 
 async def speak_club_lower(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
+    await check_bot_context(update, context)
     text = MessageTemplates.get('speaky_club_choice_1')
     keyboard = [
         [InlineKeyboardButton('Да', callback_data='yes')],
@@ -336,6 +341,7 @@ async def speak_club_lower(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_lower_level_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await check_bot_context(update, context)
     if not update.callback_query:
         return 'LOWER_LEVEL_CHOICE'
     if update.callback_query.data == 'yes':
@@ -356,6 +362,7 @@ async def handle_lower_level_choice(update: Update, context: ContextTypes.DEFAUL
 
 async def level_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
+    await check_bot_context(update, context)
     text = MessageTemplates.get('level_choice_1')
     keyboard = [
         [InlineKeyboardButton('Да', callback_data='yes')],
@@ -378,6 +385,7 @@ async def handle_level_test_confirmation(update: Update, context: ContextTypes.D
     if not update.callback_query:
         return 'AWAIT_LEVEL_TEST_CONFIRMATION'
     chat_id = update.effective_chat.id
+    await check_bot_context(update, context)
     if update.callback_query.data == 'no':
         text = MessageTemplates.get('level_test_confirmation_no')
         await context.bot.send_message(
@@ -411,6 +419,7 @@ async def handle_level_test_confirmation(update: Update, context: ContextTypes.D
 
 async def group_club_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
+    await check_bot_context(update, context)
     text_1 = MessageTemplates.get('group_lessons_1')
     text_2 = MessageTemplates.get('group_lessons_2')
     text_3 = MessageTemplates.get('group_lessons_3')
@@ -450,6 +459,7 @@ async def group_club_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def personal_lessons_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
+    await check_bot_context(update, context)
     text = MessageTemplates.get('personal_lessons_1')
     link = await ExternalLink.objects.aget(source=LinkSources.FORM_PERSONAL_LESSONS)
     keyboard = [
@@ -548,6 +558,7 @@ async def teacher_pagination(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def handle_reminder_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
+    await check_bot_context(update, context)
     if not update.callback_query:
         return 'AWAIT_REMINDER_CHOICE'
     if update.callback_query.data == 'welcome_choice':
@@ -568,14 +579,7 @@ async def handle_reminder_choice(update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def user_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    if not context.user_data.get('user'):
-        context.user_data['user'], _ = await User.objects.prefetch_related('subscriptions').aget_or_create(
-            chat_id=chat_id,
-            defaults={
-                'username': update.effective_chat.username
-            }
-        )
+    await check_bot_context(update, context)
     if update.message:
         user_reply = update.message.text
     elif update.callback_query.data:
@@ -609,13 +613,7 @@ async def user_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def reload_from_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    if not context.user_data.get('user'):
-        context.user_data['user'], _ = await User.objects.prefetch_related('subscriptions').aget_or_create(
-            chat_id=chat_id,
-            defaults={
-                'username': update.effective_chat.username
-            }
-        )
+    await check_bot_context(update, context)
     if context.user_data['user'].is_superuser:
         if update.message.text == '!reload_teachers':
             await MessageTeachers.load_teachers(context)
