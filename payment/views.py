@@ -16,7 +16,7 @@ from product.models import LinkSources, ExternalLink, ProductType, Product
 from speakybot import settings
 from subscription.models import Subscription
 from user.models import User
-from utils.helpers import get_tg_payload, send_tg_message_to_admins
+from utils.helpers import get_tg_payload, send_tg_message_to_admins_from_django
 from utils.services import create_yoo_refund
 
 logger = logging.getLogger(__name__)
@@ -75,6 +75,7 @@ class YooPaymentCallBackView(View):
             payment.subscription = subscription
             subscription.user.first_sub_date = datetime.datetime.now()
             subscription.user.save()
+            payment.subscription.save()
         else:
             subscription.unsub_date = subscription.unsub_date + relativedelta(months=1)
 
@@ -113,13 +114,12 @@ class YooPaymentCallBackView(View):
                 else:
                     text += f"Подписка на {group_name} продлена до {unsub_date_formatted}"
                 payload = get_tg_payload(chat_id=payment.user.chat_id, message_text=text)
-
         subscription.save()
         payment.save()
         self.send_tg_message(payload)
 
         admins_text = (f"Поступил платеж {payment.amount} {payment.currency} от @{subscription.user.username}")
-        send_tg_message_to_admins(admins_text)
+        send_tg_message_to_admins_from_django(admins_text)
 
     def process_payment_canceled(self, payment):
         payment.status = PaymentStatus.CANCELED
@@ -152,7 +152,7 @@ class YooPaymentCallBackView(View):
 
         admins_text = (f"Возврат суммы {refund.payment.amount} {refund.payment.currency} для пользователя "
                        f"@{refund.payment.user.username} проведен успешно.\n")
-        send_tg_message_to_admins(admins_text)
+        send_tg_message_to_admins_from_django(admins_text)
 
     @staticmethod
     def send_tg_message(payload):

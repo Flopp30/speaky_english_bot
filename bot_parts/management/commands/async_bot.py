@@ -20,7 +20,7 @@ from telegram.ext import (
 from product.models import Product, ProductType, ExternalLink, LinkSources, SalesAvailability
 from subscription.models import Subscription
 from user.models import User
-from utils.helpers import send_tg_message_to_admins
+from utils.helpers import send_message_to_admins_from_bot
 from utils.models import MessageTemplates, MessageTeachers
 from utils.periodic_tasks import renew_sub_hourly, send_reminders_hourly
 from utils.services import create_db_payment
@@ -405,7 +405,7 @@ async def handle_level_test_confirmation(update: Update, context: ContextTypes.D
         tg_link = f'https://web.telegram.org/#{chat_id}'
         admins_text = (f'Пользователь @{username} хотел бы пройти тест своего языкового уровня\n'
                        f'Ссылка на пользователя: {tg_link}')
-        send_tg_message_to_admins(admins_text)
+        await send_message_to_admins_from_bot(context, admins_text)
         return 'START'
 
 
@@ -562,7 +562,7 @@ async def handle_reminder_choice(update: Update, context: ContextTypes.DEFAULT_T
             text=MessageTemplates.get('need_feedback')
         )
         admins_text = f'У пользователя @{username} есть вопросы о школе\nСсылка: {tg_link}'
-        send_tg_message_to_admins(admins_text)
+        await send_message_to_admins_from_bot(context, admins_text)
         return 'START'
     return 'START'
 

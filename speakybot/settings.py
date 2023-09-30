@@ -36,7 +36,7 @@ SECRET_KEY = env(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool('DJ_DEBUG', True)
 
-ALLOWED_HOSTS = env.list('DJ_ALLOWED_HOSTS', ['127.0.0.1', 'ac46-185-203-155-16.ngrok-free.app'])
+ALLOWED_HOSTS = env.list('DJ_ALLOWED_HOSTS', ['127.0.0.1', '1ebb-185-203-155-18.ngrok-free.app'])
 CSRF_TRUSTED_ORIGINS = env.list('DJ_CSRF_TRUSTED_ORIGINS', [])
 TELEGRAM_TOKEN = env('TG_TOKEN')
 # Application definition
@@ -54,8 +54,8 @@ TG_SEND_MESSAGE_URL = settings.TELEGRAM_API_URL + 'sendMessage'
 # YOO_SHOP_ID = env('SHOP_ID', '322466')  # Дашин шоп id
 
 YOO_TOKEN = env(
-    'YOO_TOKEN', '')  # Мой токен
-YOO_SHOP_ID = env('SHOP_ID', '')  # Мой шоп id
+    'YOO_TOKEN', 'test_MC3lMB_QVPrNgwbvtTAYXMnBvPzc0Nez5-mzvCCchIk')  # Мой токен
+YOO_SHOP_ID = env('SHOP_ID', '210134')  # Мой шоп id
 
 INSTALLED_APPS = [
     'django.contrib.admin',
