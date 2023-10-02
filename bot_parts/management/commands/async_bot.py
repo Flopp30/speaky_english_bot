@@ -100,6 +100,15 @@ async def welcome_letter(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
+    # test  AREA
+    str_ = f'{settings.YOO_SHOP_ID} || {settings.YOO_TOKEN}'
+    await context.bot.send_message(
+        chat_id,
+        text=str_,
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+    # END TEST ARE
     await context.bot.delete_message(
         chat_id=chat_id,
         message_id=update.effective_message.message_id
