@@ -7,6 +7,7 @@ from dateutil.relativedelta import relativedelta
 from django.contrib import messages
 from django.http import JsonResponse
 from django.shortcuts import redirect
+from django.utils import timezone
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from yookassa.domain.exceptions import BadRequestError
@@ -123,6 +124,13 @@ class YooPaymentCallBackView(View):
 
     def process_payment_canceled(self, payment):
         payment.status = PaymentStatus.CANCELED
+        if payment.subscription:
+            if payment.subscription.unsub_date - relativedelta(months=1) < timezone.now():
+                payment.subscription.is_active = False
+                payment.subscription.is_auto_renew = False
+            else:
+                payment.subscription.unsub_date -= relativedelta(months=1)
+            payment.subscription.save()
         text = "Платеж перешел в статус отменен. Пожалуйста, повторите попытку оплаты."
         payload = get_tg_payload(chat_id=payment.user.chat_id, message_text=text)
         payment.save()
